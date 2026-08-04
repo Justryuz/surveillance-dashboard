@@ -16,6 +16,8 @@ export default function HalamanUtama({ isDarkMode = false }) {
 
   // --- FILTERS ---
   const [selectedYear, setSelectedYear] = useState("2025");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedNegeri, setSelectedNegeri] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedCommodity, setSelectedCommodity] = useState("");
   
@@ -60,9 +62,12 @@ export default function HalamanUtama({ isDarkMode = false }) {
       pDalam = 20; pLuar = 40; pNegeri = 30; pEksport = 10;
     }
 
-    const yearMult = selectedYear === "2024" ? 0.85 : 1.0; 
-    baseBekalan *= yearMult; basePasaran *= yearMult; basePengeluaran *= yearMult;
-    importQty *= yearMult; penggunaanQty *= yearMult; eksportQty *= yearMult;
+    const yearMult = selectedYear === "2024" ? 0.85 : 1.0;
+    const monthMult = selectedMonth ? 0.085 : 1.0;
+    const negeriMult = selectedNegeri ? 0.25 : 1.0;
+    const filterMult = yearMult * monthMult * negeriMult;
+    baseBekalan *= filterMult; basePasaran *= filterMult; basePengeluaran *= filterMult;
+    importQty *= filterMult; penggunaanQty *= filterMult; eksportQty *= filterMult;
 
     if (selectedYear === "2024") { pEksport -= 2; pDalam += 2; }
 
@@ -259,7 +264,7 @@ export default function HalamanUtama({ isDarkMode = false }) {
       mapData, importRoutes, exportRoutes, globalTradeStats, marketStats,
       displayTop5Pengeluaran, displayTop5Penggunaan, top5Level // Exported mapped drill-down data
     };
-  }, [selectedYear, selectedCategory, selectedCommodity, mapViewMode, selectedRegion, selectedCountry, isCili, isTembikai, isKubis]);
+  }, [selectedYear, selectedMonth, selectedNegeri, selectedCategory, selectedCommodity, mapViewMode, selectedRegion, selectedCountry, isCili, isTembikai, isKubis]);
 
   const { 
     bekalan: bekalanSemasa, pasaran: pasaranSemasa, 
@@ -337,6 +342,8 @@ export default function HalamanUtama({ isDarkMode = false }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors"><option value="2025">2025</option><option value="2024">2024</option></select>
+                  <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors"><option value="">Semua Bulan</option><option value="jan">Januari</option><option value="feb">Februari</option><option value="mac">Mac</option><option value="apr">April</option><option value="mei">Mei</option><option value="jun">Jun</option><option value="jul">Julai</option><option value="ogo">Ogos</option><option value="sep">September</option><option value="okt">Oktober</option><option value="nov">November</option><option value="dis">Disember</option></select>
+                  <select value={selectedNegeri} onChange={(e) => setSelectedNegeri(e.target.value)} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors"><option value="">Semua Negeri</option><option value="johor">Johor</option><option value="kedah">Kedah</option><option value="kelantan">Kelantan</option><option value="melaka">Melaka</option><option value="negeri_sembilan">Negeri Sembilan</option><option value="pahang">Pahang</option><option value="perak">Perak</option><option value="perlis">Perlis</option><option value="pulau_pinang">Pulau Pinang</option><option value="sabah">Sabah</option><option value="sarawak">Sarawak</option><option value="selangor">Selangor</option><option value="terengganu">Terengganu</option><option value="kl">W.P. Kuala Lumpur</option></select>
                   <select value={selectedCategory} onChange={(e) => {setSelectedCategory(e.target.value); setSelectedCommodity("");}} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors"><option value="">Semua Kategori</option><option value="buah">Buah-Buahan</option><option value="sayur">Sayur-Sayuran</option></select>
                   <select value={selectedCommodity} onChange={(e) => setSelectedCommodity(e.target.value)} disabled={!selectedCategory} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors disabled:opacity-50"><option value="">Semua Komoditi</option>{selectedCategory === "buah" && <option value="tembikai">Tembikai</option>}{selectedCategory === "sayur" && <><option value="cili">Cili</option><option value="kubis">Kubis</option></>}</select>
                 </div>
