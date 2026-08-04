@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* Tell Tailwind to listen to our .dark class toggle instead of Windows */
+@custom-variant dark (&:where(.dark, .dark *));
