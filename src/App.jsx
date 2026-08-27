@@ -13,13 +13,13 @@ export default function App() {
 
   return (
     <Router>
-      <div className={`${isDarkMode ? 'dark' : ''} font-sans relative`}>
+      <div className={`${isDarkMode ? 'dark' : ''} font-sans relative h-full w-full`}>
         
-        {/* FLEXIBLE WRAPPER - works standalone and embedded */}
-        <div className="h-screen w-full min-h-0 bg-slate-50 dark:bg-slate-950 p-2 md:p-4 flex flex-col transition-colors duration-300">
+        {/* h-full instead of h-screen so it respects iframe/container height */}
+        <div className="h-full w-full bg-slate-50 dark:bg-slate-950 p-2 md:p-4 flex flex-col transition-colors duration-300">
           
-          {/* Card Container stretches to exact limits */}
-          <div className="flex-1 w-full h-full bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-3 md:p-4 flex flex-col relative transition-colors duration-300 overflow-auto">
+          {/* Card Container — overflow-hidden so inner flex chain works correctly */}
+          <div className="flex-1 min-h-0 w-full bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-3 md:p-4 flex flex-col relative transition-colors duration-300 overflow-hidden">
             
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
@@ -35,14 +35,16 @@ export default function App() {
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 min-h-0 w-full text-slate-800 dark:text-slate-200 mt-1">
-              <Routes>
-                {/* Propagating theme parameter to HalamanUtama component */}
-                <Route path="/" element={<HalamanUtama isDarkMode={isDarkMode} />} />
-                <Route path="/pembekalan" element={<Pembekalan />} />
-                <Route path="/permintaan" element={<Permintaan />} />
-                <Route path="/pemborongan" element={<Pemborongan />} />
-              </Routes>
+            <div className="flex-1 min-h-0 w-full text-slate-800 dark:text-slate-200 mt-1 overflow-hidden">
+              <div className="h-full w-full">
+                <Routes>
+                  {/* Propagating theme parameter to HalamanUtama component */}
+                  <Route path="/" element={<HalamanUtama isDarkMode={isDarkMode} />} />
+                  <Route path="/pembekalan" element={<Pembekalan />} />
+                  <Route path="/permintaan" element={<Permintaan />} />
+                  <Route path="/pemborongan" element={<Pemborongan />} />
+                </Routes>
+              </div>
             </div>
             
           </div>

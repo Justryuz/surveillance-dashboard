@@ -189,7 +189,7 @@ export default function MalaysiaFlowMap({
   } : {};
 
   return (
-    <div className="w-full h-full flex flex-col relative min-h-[350px]">
+    <div className="w-full h-full flex flex-col relative min-h-[200px]">
       <div className="absolute top-2 right-2 md:right-4 z-10 flex gap-1">
          {!forceMode ? (
            <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg shadow-inner border border-slate-300 dark:border-slate-700 transition-colors">
@@ -209,7 +209,11 @@ export default function MalaysiaFlowMap({
          <button onClick={() => { if (chartRef.current) chartRef.current.getEchartsInstance().dispatchAction({ type: 'unselect', seriesIndex: 0 }); if (!forceMode) setTradeMode('all'); setTransportMode('all'); if (onResetMap) onResetMap(); }} className={`flex items-center justify-center p-1.5 px-2.5 rounded-lg border transition-all ${tradeMode === 'all' && transportMode === 'all' && !forceMode ? 'bg-blue-600 border-blue-500 text-white shadow-md' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 hover:text-slate-700 dark:text-slate-400'}`} title="Reset Pilihan"><RotateCcw className="w-3.5 h-3.5" /></button>
       </div>
       {!mapLoaded && <div className="flex-1 flex items-center justify-center text-slate-400 text-xs animate-pulse mt-8">Memuatkan Peta Global...</div>}
-      {mapLoaded && <div className="flex-1 w-full h-full min-h-[350px]"><ReactECharts ref={chartRef} echarts={echarts} option={option} style={{ height: '100%', width: '100%' }} notMerge={true} /></div>}
+      {mapLoaded && (
+        <div className="absolute inset-0 top-0 left-0 right-0 bottom-0">
+          <ReactECharts ref={chartRef} echarts={echarts} option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />
+        </div>
+      )}
     </div>
   );
 }

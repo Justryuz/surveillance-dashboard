@@ -144,13 +144,15 @@ export default function MarketPieChart({
 
   return (
     <div className="w-full h-full flex flex-col pt-2">
-      <div className="flex-1 w-full min-h-0">
-        <ReactECharts 
-          option={option} 
-          style={{ height: '100%', width: '100%' }} 
-          opts={{ renderer: 'svg' }}
-          notMerge={true} 
-        />
+      <div className="flex-1 w-full min-h-0 relative">
+        <div className="absolute inset-0">
+          <ReactECharts 
+            option={option} 
+            style={{ height: '100%', width: '100%' }} 
+            opts={{ renderer: 'svg' }}
+            notMerge={true} 
+          />
+        </div>
       </div>
     </div>
   );

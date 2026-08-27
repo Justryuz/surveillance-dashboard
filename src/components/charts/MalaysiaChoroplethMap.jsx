@@ -118,7 +118,7 @@ export default function MalaysiaChoroplethMap({
       {!isReady && <div className="flex-1 flex items-center justify-center text-slate-400 text-xs animate-pulse mt-8">Memuatkan Peta...</div>}
       
       {isReady && (
-        <div className="flex-1 w-full mt-6 md:mt-8 min-h-0">
+        <div className="absolute inset-0 top-8 left-0 right-0 bottom-0">
           <ReactECharts ref={chartRef} echarts={echarts} option={option} style={{ height: '100%', width: '100%' }} notMerge={true} onEvents={onEvents} />
         </div>
       )}

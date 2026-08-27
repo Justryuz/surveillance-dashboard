@@ -85,21 +85,23 @@ export default function TradeDonutChart({
   return (
     <div className="w-full h-full flex-1 relative flex flex-col justify-center min-h-0">
       
-      {/* 1. The Donut Chart Layer */}
-      <ReactECharts 
-        option={option} 
-        style={{ height: '100%', width: '100%' }} 
-        opts={{ renderer: 'svg' }}
-        notMerge={true}
-      />
+      {/* Chart fills container via absolute positioning — prevents unbounded height in iframes */}
+      <div className="absolute inset-0">
+        <ReactECharts 
+          option={option} 
+          style={{ height: '100%', width: '100%' }} 
+          opts={{ renderer: 'svg' }}
+          notMerge={true}
+        />
+      </div>
 
-      {/* 2. The HTML Flex Overlay Layer (Guarantees perfect center alignment) */}
+      {/* HTML Overlay Layer for center label */}
       <div 
         className="absolute top-1/2 flex flex-col items-center justify-center pointer-events-none"
         style={{ 
           left: centerX, 
-          transform: 'translate(-50%, -50%)', // Mathematically centers the div
-          width: '50%' // Keeps text safely constrained inside the donut ring
+          transform: 'translate(-50%, -50%)',
+          width: '50%'
         }}
       >
         <span className={`font-black text-sm md:text-base leading-none tracking-tight mb-1 ${isDarkMode ? 'text-slate-50' : 'text-slate-800'}`}>

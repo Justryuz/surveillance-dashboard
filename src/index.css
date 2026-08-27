@@ -3,10 +3,11 @@
 /* Tell Tailwind to listen to our .dark class toggle instead of Windows */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Ensure the app fills its container when embedded in an iframe */
+/* Ensure full height chain works in both standalone and embedded (iframe) contexts */
 html, body, #root {
   height: 100%;
   width: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
 }
