@@ -30,10 +30,12 @@ function AppContent() {
             </button>
           )}
 
-          {/* Menu Header — always visible */}
-          <div className="shrink-0">
-            <SubNav />
-          </div>
+          {/* Menu Header — hidden when embedded */}
+          {!isEmbedded && (
+            <div className="shrink-0">
+              <SubNav />
+            </div>
+          )}
 
           {/* Main Content Area */}
           <div className="flex-1 min-h-0 w-full text-slate-800 dark:text-slate-200 overflow-hidden">
