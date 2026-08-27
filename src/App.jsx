@@ -15,11 +15,11 @@ export default function App() {
     <Router>
       <div className={`${isDarkMode ? 'dark' : ''} font-sans relative`}>
         
-        {/* STRICT 100VH FULLSCREEN WRAPPER - NO SCROLLING */}
-        <div className="h-screen w-screen overflow-hidden bg-slate-50 dark:bg-slate-950 p-2 md:p-4 flex flex-col transition-colors duration-300">
+        {/* FLEXIBLE WRAPPER - works standalone and embedded */}
+        <div className="h-screen w-full min-h-0 bg-slate-50 dark:bg-slate-950 p-2 md:p-4 flex flex-col transition-colors duration-300">
           
           {/* Card Container stretches to exact limits */}
-          <div className="flex-1 w-full h-full bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-3 md:p-4 flex flex-col relative transition-colors duration-300 overflow-hidden">
+          <div className="flex-1 w-full h-full bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-3 md:p-4 flex flex-col relative transition-colors duration-300 overflow-auto">
             
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}

@@ -2,3 +2,11 @@
 
 /* Tell Tailwind to listen to our .dark class toggle instead of Windows */
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Ensure the app fills its container when embedded in an iframe */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
