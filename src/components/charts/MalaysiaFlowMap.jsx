@@ -10,7 +10,8 @@ export default function MalaysiaFlowMap({
   onResetMap, 
   forceMode = null,
   showTransportToggle = false,
-  filterMultiplier = 1.0 // NEW: Connects map data to all dashboard filters
+  filterMultiplier = 1.0, // NEW: Connects map data to all dashboard filters
+  realCountryStats = null // Real { imp, exp, qtyImp, qtyExp } per country from the sheet; falls back to the mock hash below when a country has no real data yet.
 }) {
   const chartRef = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -73,6 +74,24 @@ export default function MalaysiaFlowMap({
     }
 
     const generateStats = (name) => {
+      // Prefer real sheet-derived totals when this country has any —
+      // otherwise fall back to the deterministic mock hash below so the
+      // map still shows *something* for countries the sheet has no data for.
+      const real = realCountryStats && realCountryStats[name];
+      if (real && (real.imp != null || real.exp != null)) {
+        const imp = real.imp ?? 0;
+        const exp = real.exp ?? 0;
+        const qtyImp = real.qtyImp ?? 0;
+        const qtyExp = real.qtyExp ?? 0;
+        return {
+          imp: imp.toFixed(1),
+          exp: exp.toFixed(1),
+          bal: (exp - imp).toFixed(1),
+          qtyImp: qtyImp.toLocaleString(undefined, { maximumFractionDigits: 0 }),
+          qtyExp: qtyExp.toLocaleString(undefined, { maximumFractionDigits: 0 }),
+        };
+      }
+
       const base = name.charCodeAt(0) + name.charCodeAt(name.length-1) + (selectedCommodity ? selectedCommodity.charCodeAt(0) : 0);
       
       // Calculate base values and then scale them by the global filter multiplier
@@ -108,7 +127,7 @@ export default function MalaysiaFlowMap({
     }));
 
     return { importFlows, exportFlows, nodeData };
-  }, [selectedCommodity, selectedYear, filterMultiplier]); // Reacts to multiplier changes
+  }, [selectedCommodity, selectedYear, filterMultiplier, realCountryStats]); // Reacts to multiplier changes
 
   const filteredImportFlows = useMemo(() => {
     if (transportMode === 'all') return chartData.importFlows;
@@ -125,7 +144,7 @@ export default function MalaysiaFlowMap({
     }
     seriesArr.push({
       name: 'Hab Perdagangan', type: 'effectScatter', coordinateSystem: 'geo', zlevel: 3,
-      rippleEffect: { brushType: 'stroke', scale: 3 }, label: { show: true, fontSize: 9, fontWeight: 'bold' },
+      rippleEffect: { brushType: 'stroke', scale: 3 }, label: { show: true, fontSize: 9, fontWeight: 'bold', formatter: '{b}' },
       itemStyle: { shadowBlur: 5, shadowColor: '#000' }, data: chartData.nodeData
     });
     return seriesArr;

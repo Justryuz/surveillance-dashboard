@@ -7,8 +7,35 @@ import MarketPieChart from '../components/charts/MarketPieChart';
 import MalaysiaFlowMap from '../components/charts/MalaysiaFlowMap';
 import MalaysiaChoroplethMap from '../components/charts/MalaysiaChoroplethMap';
 import TradeDonutChart from '../components/charts/TradeDonutChart';
+import { useTradeData } from '../hooks/useTradeData';
+import { useDashboardData } from '../hooks/useDashboardData';
+import { computeGlobalTradeStats, computeQuantityTotal, computeCountryTradeStats } from '../lib/tradeAggregation';
+import { computeMapData, computeTop5Pengeluaran, computeProductionTotal, computeCategoryCommodityTree } from '../lib/productionAggregation';
+import { computeTop5Penggunaan, computeConsumptionTotalKg } from '../lib/consumptionAggregation';
+import { computePieData } from '../lib/marketFlowAggregation';
+import { computeRouteSplits } from '../lib/logisticsAggregation';
+import { COMMODITY_KEYWORDS, NEGERI_CODE_TO_LABEL } from '../config/sheetsConfig';
+import { FLOW_MAP_COUNTRY_KEYWORDS } from '../config/countryKeywords';
+import { STATE_DISTRICTS_MAP } from '../config/regions';
 
 export default function HalamanUtama({ isDarkMode = false }) {
+  // --- LIVE DATA FROM GOOGLE SHEET ---
+  // useTradeData -> IMPORT / EXPORT tabs (trade totals + top-5 countries)
+  // useDashboardData -> PRODUCTION, CONSUMPTION_BY_STATE, MARKET_FLOW,
+  //   TRADE_LOGISTIC, REF_PORT (map, top-5 lists, pie chart, route donuts)
+  // Every real value below falls back to the original mock number whenever
+  // its sheet is still loading, errored, or empty, so the page never
+  // renders blank.
+  const { importRows, exportRows, loading: tradeLoading, error: tradeError } = useTradeData();
+  const {
+    PRODUCTION: productionRows,
+    CONSUMPTION_BY_STATE: consumptionRows,
+    MARKET_FLOW: marketFlowRows,
+    TRADE_LOGISTIC: tradeLogisticRows,
+    REF_PORT: refPortRows,
+    loading: dashboardLoading,
+    error: dashboardError,
+  } = useDashboardData();
   const [currentView, setCurrentView] = useState(0); 
   const handlePrev = () => setCurrentView((prev) => (prev === 0 ? 1 : prev - 1));
   const handleNext = () => setCurrentView((prev) => (prev === 1 ? 0 : prev + 1));
@@ -27,12 +54,134 @@ export default function HalamanUtama({ isDarkMode = false }) {
   const [selectedCountry, setSelectedCountry] = useState(null); 
 
   // --- TOP-LEVEL SCOPED COMMODITY BOOLEANS ---
-  const isCili = selectedCommodity === 'cili';
-  const isTembikai = selectedCommodity === 'tembikai';
-  const isKubis = selectedCommodity === 'kubis';
+  // These now do a loose substring check since selectedCommodity holds the
+  // real "Jenis Komoditi" text from the sheet (e.g. "Cili Kering"), not a
+  // fixed code — only used to steer the mock-fallback numbers below.
+  const commodityLower = selectedCommodity.toLowerCase();
+  const isCili = commodityLower.includes('cili');
+  const isTembikai = commodityLower.includes('tembikai');
+  const isKubis = commodityLower.includes('kubis');
 
-  // --- MOCK DATABASE ENGINE ---
-  const dashboardData = useMemo(() => {
+  // Shared filter values used across every real-data aggregation below.
+  // selectedCategory / selectedCommodity are now the real "Kategori Komoditi"
+  // / "Jenis Komoditi" text pulled straight from the sheet (see the
+  // categoryCommodityTree memo below), so they're used directly as
+  // substring-match keywords rather than looked up from a fixed code list.
+  const commodityMalayKeyword = selectedCommodity || undefined;
+  const categoryKeyword = selectedCategory || undefined;
+  const negeriLabel = selectedNegeri ? NEGERI_CODE_TO_LABEL[selectedNegeri] : undefined;
+
+  // Real category -> commodity options for the two filter dropdowns, built
+  // straight from PRODUCTION so the lists always match what's actually in
+  // the sheet instead of a fixed hardcoded set. Falls back to the original
+  // 2-category/3-commodity mock list while PRODUCTION is still loading.
+  const categoryCommodityTree = useMemo(() => {
+    if (dashboardLoading || dashboardError || productionRows.length === 0) return null;
+    return computeCategoryCommodityTree(productionRows);
+  }, [productionRows, dashboardLoading, dashboardError]);
+
+  const MOCK_CATEGORY_TREE = {
+    categories: ['Buah-Buahan', 'Sayur-Sayuran'],
+    commoditiesByCategory: { 'Buah-Buahan': ['Tembikai'], 'Sayur-Sayuran': ['Cili', 'Kubis'] },
+  };
+  const activeCategoryTree = categoryCommodityTree || MOCK_CATEGORY_TREE;
+  const commodityOptionsForSelectedCategory = selectedCategory
+    ? (activeCategoryTree.commoditiesByCategory[selectedCategory] || [])
+    : [];
+
+  // --- Insight Perdagangan (IMPORT / EXPORT tabs) ---
+  const realGlobalTradeStats = useMemo(() => {
+    if (tradeLoading || tradeError || importRows.length === 0) return null;
+    return computeGlobalTradeStats(importRows, exportRows, {
+      year: selectedYear,
+      monthCode: selectedMonth || undefined,
+      commodityKeyword: commodityMalayKeyword,
+      categoryKeyword,
+    });
+  }, [importRows, exportRows, tradeLoading, tradeError, selectedYear, selectedMonth, commodityMalayKeyword, categoryKeyword]);
+
+  const realImportQty = useMemo(() => {
+    if (tradeLoading || tradeError || importRows.length === 0) return null;
+    return computeQuantityTotal(importRows, { year: selectedYear, monthCode: selectedMonth || undefined, commodityKeyword: commodityMalayKeyword, categoryKeyword });
+  }, [importRows, tradeLoading, tradeError, selectedYear, selectedMonth, commodityMalayKeyword, categoryKeyword]);
+
+  const realExportQty = useMemo(() => {
+    if (tradeLoading || tradeError || exportRows.length === 0) return null;
+    return computeQuantityTotal(exportRows, { year: selectedYear, monthCode: selectedMonth || undefined, commodityKeyword: commodityMalayKeyword, categoryKeyword });
+  }, [exportRows, tradeLoading, tradeError, selectedYear, selectedMonth, commodityMalayKeyword, categoryKeyword]);
+
+  // Real per-country stats for the world flow map (MalaysiaFlowMap) —
+  // this map used to generate its own fake per-country numbers from a
+  // character-code hash, unrelated to the real top-5 country rankings
+  // shown elsewhere on this page. This makes the two consistent.
+  const realCountryStats = useMemo(() => {
+    if (tradeLoading || tradeError || importRows.length === 0) return null;
+    return computeCountryTradeStats(
+      importRows, exportRows,
+      { year: selectedYear, monthCode: selectedMonth || undefined, commodityKeyword: commodityMalayKeyword, categoryKeyword },
+      FLOW_MAP_COUNTRY_KEYWORDS
+    );
+  }, [importRows, exportRows, tradeLoading, tradeError, selectedYear, selectedMonth, commodityMalayKeyword, categoryKeyword]);
+
+  // --- Map + Top-5 Pengeluaran (PRODUCTION tab) ---
+  // Map + top-5 lists show a breakdown ACROSS states/districts, so the
+  // Negeri dropdown filter must not be applied to them (it would zero out
+  // every state except the one selected, making the map look frozen).
+  // It's only applied to the scalar KPI totals below.
+  const productionBreakdownFilters = { year: selectedYear, monthCode: selectedMonth || undefined, commodityKeyword: commodityMalayKeyword, categoryKeyword };
+  const productionTotalFilters = { ...productionBreakdownFilters, negeriLabel };
+  const productionReady = !dashboardLoading && !dashboardError && productionRows.length > 0;
+
+  const realProductionTotal = useMemo(() => {
+    if (!productionReady) return null;
+    return computeProductionTotal(productionRows, productionTotalFilters);
+  }, [productionReady, productionRows, selectedYear, selectedMonth, commodityMalayKeyword, categoryKeyword, negeriLabel]);
+
+  const realMapData = useMemo(() => {
+    if (!productionReady) return null;
+    return computeMapData(productionRows, productionBreakdownFilters, mapViewMode);
+  }, [productionReady, productionRows, selectedYear, selectedMonth, commodityMalayKeyword, categoryKeyword, mapViewMode]);
+
+  const realTop5Pengeluaran = useMemo(() => {
+    if (!productionReady) return null;
+    return computeTop5Pengeluaran(productionRows, productionBreakdownFilters, selectedRegion);
+  }, [productionReady, productionRows, selectedYear, selectedMonth, commodityMalayKeyword, categoryKeyword, selectedRegion]);
+
+  // --- Top-5 Penggunaan (CONSUMPTION_BY_STATE tab) ---
+  const consumptionReady = !dashboardLoading && !dashboardError && consumptionRows.length > 0;
+  const consumptionBreakdownFilters = { year: selectedYear, commodityKeyword: commodityMalayKeyword, categoryKeyword };
+  const consumptionTotalFilters = { ...consumptionBreakdownFilters, negeriLabel };
+
+  const realConsumptionTotalKg = useMemo(() => {
+    if (!consumptionReady) return null;
+    return computeConsumptionTotalKg(consumptionRows, consumptionTotalFilters);
+  }, [consumptionReady, consumptionRows, selectedYear, commodityMalayKeyword, categoryKeyword, negeriLabel]);
+
+  const realTop5Penggunaan = useMemo(() => {
+    if (!consumptionReady) return null;
+    return computeTop5Penggunaan(consumptionRows, consumptionBreakdownFilters, selectedRegion, STATE_DISTRICTS_MAP);
+  }, [consumptionReady, consumptionRows, selectedYear, commodityMalayKeyword, categoryKeyword, selectedRegion]);
+
+  // --- Pie chart / Saluran Pasaran (MARKET_FLOW tab) ---
+  const realPieData = useMemo(() => {
+    if (dashboardLoading || dashboardError || marketFlowRows.length === 0) return null;
+    return computePieData(marketFlowRows, { year: selectedYear, commodityKeyword: commodityMalayKeyword, categoryKeyword });
+  }, [marketFlowRows, dashboardLoading, dashboardError, selectedYear, commodityMalayKeyword, categoryKeyword]);
+
+  // --- Route donuts (TRADE_LOGISTIC joined with REF_PORT) ---
+  const realRouteSplits = useMemo(() => {
+    if (dashboardLoading || dashboardError || tradeLogisticRows.length === 0 || refPortRows.length === 0) {
+      return { importRoutes: null, exportRoutes: null };
+    }
+    return computeRouteSplits(
+      tradeLogisticRows, refPortRows,
+      { year: selectedYear, monthCode: selectedMonth || undefined, commodityCode: selectedCommodity || undefined },
+      COMMODITY_KEYWORDS
+    );
+  }, [tradeLogisticRows, refPortRows, dashboardLoading, dashboardError, selectedYear, selectedMonth, selectedCommodity]);
+
+  // --- MOCK DATABASE ENGINE (fallback while real data loads/errors) ---
+  const mockDashboardData = useMemo(() => {
     // Base Values
     let baseBekalan = 1500000; 
     let basePasaran = 1400000;
@@ -169,7 +318,11 @@ export default function HalamanUtama({ isDarkMode = false }) {
     let globalTradeStats = {};
 
     if (countryView === 'MALAYSIA') {
-      globalTradeStats = {
+      // Real data path: use the Google Sheet aggregation when it's ready.
+      // Falls back to the old mock numbers only while the sheet is still
+      // loading (or if it errored / hasn't been configured yet), so the
+      // page never renders blank.
+      globalTradeStats = realGlobalTradeStats || {
         perspective: 'MALAYSIA', countryName: 'Malaysia',
         import: {
           total: (isCili ? 24.5 : isTembikai ? 18.2 : isKubis ? 35.4 : 125.4) * yearMult,
@@ -195,6 +348,10 @@ export default function HalamanUtama({ isDarkMode = false }) {
         }
       };
     } else {
+      // NOTE: this branch (drilling into a single foreign country's own
+      // trade stats) isn't backed by real data yet — the IMPORT/EXPORT
+      // tabs only describe Malaysia's own trade, not third countries'
+      // bilateral totals with each other. Still mock for now.
       const mockMultiplier = (countryView.charCodeAt(0) % 5 + 2) * 10 * yearMult;
       const globalRankImp = (countryView.charCodeAt(0) % 12) + 3;
       const globalRankExp = (countryView.charCodeAt(1) % 12) + 3;
@@ -264,13 +421,63 @@ export default function HalamanUtama({ isDarkMode = false }) {
       mapData, importRoutes, exportRoutes, globalTradeStats, marketStats,
       displayTop5Pengeluaran, displayTop5Penggunaan, top5Level // Exported mapped drill-down data
     };
-  }, [selectedYear, selectedMonth, selectedNegeri, selectedCategory, selectedCommodity, mapViewMode, selectedRegion, selectedCountry, isCili, isTembikai, isKubis]);
+  }, [selectedYear, selectedMonth, selectedNegeri, selectedCategory, selectedCommodity, mapViewMode, selectedRegion, selectedCountry, isCili, isTembikai, isKubis, realGlobalTradeStats]);
+
+  // --- MERGE: real sheet-derived values override the mock ones wherever
+  // they're available; otherwise the mock value for that specific piece is
+  // used, so partial data (e.g. PRODUCTION loaded but MARKET_FLOW still
+  // loading) still renders a fully-populated page. ---
+  const dashboardData = useMemo(() => {
+    const pengeluaran = realProductionTotal != null ? Math.round(realProductionTotal) : mockDashboardData.pengeluaran;
+    const importQty = realImportQty != null ? Math.round(realImportQty) : mockDashboardData.importQty;
+    const penggunaanQty = realConsumptionTotalKg != null ? Math.round(realConsumptionTotalKg / 1000) : mockDashboardData.penggunaanQty;
+    const eksportQty = realExportQty != null ? Math.round(realExportQty) : mockDashboardData.eksportQty;
+
+    // Supply (bekalan) = production + import; Demand (pasaran) = consumption + export.
+    // Recomputed from whichever of the two feeding numbers are real, so the
+    // surplus/deficit status bar reflects real data as soon as any of it loads.
+    const bekalan = (realProductionTotal != null || realImportQty != null)
+      ? Math.round(pengeluaran + importQty)
+      : mockDashboardData.bekalan;
+    const pasaran = (realConsumptionTotalKg != null || realExportQty != null)
+      ? Math.round(penggunaanQty + eksportQty)
+      : mockDashboardData.pasaran;
+
+    const top5Pengeluaran = realTop5Pengeluaran?.list ?? mockDashboardData.displayTop5Pengeluaran;
+    const top5Penggunaan = realTop5Penggunaan?.list ?? mockDashboardData.displayTop5Penggunaan;
+    // Prefer whichever real list actually drilled to district level, so the
+    // two lists' headers ("Mengikut Daerah" vs "Mengikut Negeri") stay in sync.
+    const top5Level = realTop5Pengeluaran?.top5Level ?? realTop5Penggunaan?.top5Level ?? mockDashboardData.top5Level;
+
+    return {
+      ...mockDashboardData,
+      pengeluaran, importQty, penggunaanQty, eksportQty, bekalan, pasaran,
+      mapData: realMapData ?? mockDashboardData.mapData,
+      pieData: realPieData ?? mockDashboardData.pieData,
+      importRoutes: realRouteSplits.importRoutes ?? mockDashboardData.importRoutes,
+      exportRoutes: realRouteSplits.exportRoutes ?? mockDashboardData.exportRoutes,
+      displayTop5Pengeluaran: top5Pengeluaran,
+      displayTop5Penggunaan: top5Penggunaan,
+      top5Level,
+      liveFlags: {
+        map: realMapData != null,
+        pengeluaran: realProductionTotal != null,
+        penggunaan: realConsumptionTotalKg != null,
+        pie: realPieData != null,
+        routes: realRouteSplits.importRoutes != null,
+        trade: realGlobalTradeStats != null,
+      },
+    };
+  }, [
+    mockDashboardData, realProductionTotal, realImportQty, realConsumptionTotalKg, realExportQty,
+    realTop5Pengeluaran, realTop5Penggunaan, realMapData, realPieData, realRouteSplits, realGlobalTradeStats,
+  ]);
 
   const { 
     bekalan: bekalanSemasa, pasaran: pasaranSemasa, 
     pengeluaran: jumlahPengeluaran, importQty, penggunaanQty, eksportQty, 
     pieData, mapData, importRoutes, exportRoutes, globalTradeStats, marketStats, 
-    displayTop5Pengeluaran, displayTop5Penggunaan, top5Level 
+    displayTop5Pengeluaran, displayTop5Penggunaan, top5Level, liveFlags,
   } = dashboardData;
 
   const isSurplus = bekalanSemasa >= pasaranSemasa;
@@ -311,7 +518,7 @@ export default function HalamanUtama({ isDarkMode = false }) {
               <div className="flex items-center px-1 py-1 opacity-25 italic text-slate-400"><span className="w-4 text-center">-</span><span className="flex-1">Syer Domestik</span><span className="w-14 text-right">-</span><span className="w-9 text-right">-</span></div>
             )}
             <div className="flex items-center px-1 opacity-70"><span className="w-4 text-center text-slate-400">-</span><span className="flex-1 text-slate-600 dark:text-slate-400 italic">Lain-lain Negara</span><span className="w-14 text-right text-slate-600 dark:text-slate-400">{data.others.value.toFixed(1)}M</span><span className="w-9 text-right text-slate-600 dark:text-slate-400">{data.others.percent.toFixed(1)}%</span></div>
-            <div className="flex items-center px-1 pt-1 border-t-2 border-slate-300 dark:border-slate-600 mt-0.5"><span className="w-4 text-center"></span><span className="flex-1 font-black text-[9px] md:text-[10px] text-slate-800 dark:text-white uppercase tracking-wider truncate">Dagangan {countryLabel}</span><span className="w-14 text-right font-black text-[9px] md:text-[10px] text-slate-800 dark:text-white">{data.total.toFixed(1)}M</span><span className="w-9 text-right font-black text-[9px] md:text-[10px] text-slate-800 dark:text-white">100%</span></div>
+            <div className="flex items-center px-1 pt-2 border-t-2 border-slate-300 dark:border-slate-600 mt-1.5"><span className="w-4 text-center"></span><span className="flex-1 font-black text-[9px] md:text-[10px] text-slate-800 dark:text-white uppercase tracking-wider truncate">Dagangan {countryLabel}</span><span className="w-14 text-right font-black text-[9px] md:text-[10px] text-slate-800 dark:text-white">{data.total.toFixed(1)}M</span><span className="w-9 text-right font-black text-[9px] md:text-[10px] text-slate-800 dark:text-white">100%</span></div>
             {!isMalaysiaMode && (
               <div className="flex items-center justify-between px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[8px] text-slate-600 dark:text-slate-400 font-bold mt-1 border border-slate-200 dark:border-slate-700"><span className="italic">Kedudukan Pasaran Global:</span><div className="flex gap-2"><span>Rank: #{type === 'import' ? globalTradeStats.globalRankImp : globalTradeStats.globalRankExp}</span><span>Syer Global: {type === 'import' ? globalTradeStats.globalSyerImp : globalTradeStats.globalSyerExp}</span></div></div>
             )}
@@ -339,29 +546,32 @@ export default function HalamanUtama({ isDarkMode = false }) {
                 <div className="flex items-center gap-3">
                   <div className="bg-blue-100 dark:bg-blue-500/20 p-2 rounded text-blue-600 dark:text-blue-400"><Globe className="w-5 h-5" /></div>
                   <h3 className="font-bold text-base md:text-lg tracking-wider uppercase text-slate-800 dark:text-blue-100">Insight Perdagangan {globalTradeStats.perspective !== 'MALAYSIA' && <span className="text-blue-500">({globalTradeStats.countryName})</span>}</h3>
+                  {tradeLoading && <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 animate-pulse">Memuatkan data...</span>}
+                  {tradeError && <span className="text-[9px] font-bold uppercase tracking-wider text-red-500" title={tradeError}>Data sheet tidak disambung — lihat sheetsConfig.js</span>}
+                  {!tradeLoading && !tradeError && realGlobalTradeStats && <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-500">● Data Langsung</span>}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors"><option value="2025">2025</option><option value="2024">2024</option></select>
                   <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors"><option value="">Semua Bulan</option><option value="jan">Januari</option><option value="feb">Februari</option><option value="mac">Mac</option><option value="apr">April</option><option value="mei">Mei</option><option value="jun">Jun</option><option value="jul">Julai</option><option value="ogo">Ogos</option><option value="sep">September</option><option value="okt">Oktober</option><option value="nov">November</option><option value="dis">Disember</option></select>
                   <select value={selectedNegeri} onChange={(e) => setSelectedNegeri(e.target.value)} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors"><option value="">Semua Negeri</option><option value="johor">Johor</option><option value="kedah">Kedah</option><option value="kelantan">Kelantan</option><option value="melaka">Melaka</option><option value="negeri_sembilan">Negeri Sembilan</option><option value="pahang">Pahang</option><option value="perak">Perak</option><option value="perlis">Perlis</option><option value="pulau_pinang">Pulau Pinang</option><option value="sabah">Sabah</option><option value="sarawak">Sarawak</option><option value="selangor">Selangor</option><option value="terengganu">Terengganu</option><option value="kl">W.P. Kuala Lumpur</option></select>
-                  <select value={selectedCategory} onChange={(e) => {setSelectedCategory(e.target.value); setSelectedCommodity("");}} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors"><option value="">Semua Kategori</option><option value="buah">Buah-Buahan</option><option value="sayur">Sayur-Sayuran</option></select>
-                  <select value={selectedCommodity} onChange={(e) => setSelectedCommodity(e.target.value)} disabled={!selectedCategory} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors disabled:opacity-50"><option value="">Semua Komoditi</option>{selectedCategory === "buah" && <option value="tembikai">Tembikai</option>}{selectedCategory === "sayur" && <><option value="cili">Cili</option><option value="kubis">Kubis</option></>}</select>
+                  <select value={selectedCategory} onChange={(e) => {setSelectedCategory(e.target.value); setSelectedCommodity("");}} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors"><option value="">Semua Kategori</option>{activeCategoryTree.categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}</select>
+                  <select value={selectedCommodity} onChange={(e) => setSelectedCommodity(e.target.value)} disabled={!selectedCategory} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors disabled:opacity-50"><option value="">Semua Komoditi</option>{commodityOptionsForSelectedCategory.map((com) => <option key={com} value={com}>{com}</option>)}</select>
                 </div>
               </div>
               <div className="flex flex-col md:flex-row flex-1 min-h-0 gap-4">
                 <div className="flex-[1.1] w-full bg-slate-50 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700/50 p-2 flex flex-col relative overflow-hidden min-h-0 shadow-sm">
-                  <MalaysiaFlowMap selectedCommodity={selectedCommodity} selectedYear={selectedYear} onCountryClick={(country) => setSelectedCountry(country)} onResetMap={() => setSelectedCountry(null)} />
+                  <MalaysiaFlowMap selectedCommodity={selectedCommodity} selectedYear={selectedYear} onCountryClick={(country) => setSelectedCountry(country)} onResetMap={() => setSelectedCountry(null)} realCountryStats={realCountryStats} />
                 </div>
                 <div className="flex-[0.9] flex flex-col gap-3 min-h-0 h-full">
                   <div className="flex-[1.1] flex gap-3 min-h-0 w-full"><TradeRankingCard title="Sumber Utama (Import)" data={globalTradeStats.import} type="import" themeClass="text-blue-600 dark:text-cyan-400 border-blue-200 dark:border-cyan-800" /><TradeRankingCard title="Pasaran Utama (Eksport)" data={globalTradeStats.export} type="export" themeClass="text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800" /></div>
                   <div className="flex-1 flex gap-3 min-h-0 w-full">
                     <div className="flex-1 bg-slate-50 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700/50 p-2 flex flex-col relative overflow-hidden min-h-0 shadow-sm h-full w-full">
                       <h4 className="flex items-center justify-center gap-2 text-[10px] md:text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 font-bold shrink-0"><div className="w-3.5 md:w-20 shrink-0" /><span>NILAI IMPORT</span><div className="w-3.5 h-3.5 md:w-5 md:h-5 rounded-full overflow-hidden shrink-0 shadow-sm border border-slate-200 dark:border-slate-700"><img src="https://flagcdn.com/my.svg" alt="Malaysia" className="w-full h-full object-cover scale-125" /></div></h4>
-                      <TradeDonutChart isDarkMode={isDarkMode} colors={['#3b82f6', '#0ea5e9', '#6366f1']} legendPos="left" centerValue={`RM ${isCili ? '24.5' : isTembikai ? '18.2' : isKubis ? '35.4' : '125.4'}M`} centerLabel="NILAI IMPORT" data={importRoutes} />
+                      <TradeDonutChart isDarkMode={isDarkMode} colors={['#3b82f6', '#0ea5e9', '#6366f1']} legendPos="left" centerValue={`RM ${globalTradeStats.import.total.toFixed(1)}M`} centerLabel="NILAI IMPORT" data={importRoutes} />
                     </div>
                     <div className="flex-1 bg-slate-50 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700/50 p-2 flex flex-col relative overflow-hidden min-h-0 shadow-sm h-full w-full">
                         <h4 className="flex items-center justify-center text-[10px] md:text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 font-bold shrink-0"><div className="flex items-center justify-center gap-2 -translate-x-2 md:-translate-x-10"><span>NILAI EKSPORT</span><div className="w-3.5 h-3.5 md:w-5 md:h-5 rounded-full overflow-hidden shrink-0 shadow-sm border border-slate-200 dark:border-slate-700"><img src="https://flagcdn.com/my.svg" alt="Malaysia" className="w-full h-full object-cover scale-125" /></div></div></h4>
-                      <TradeDonutChart isDarkMode={isDarkMode} colors={['#f97316', '#f59e0b', '#ef4444']} legendPos="right" centerValue={`RM ${isCili ? '25.1' : isTembikai ? '19.0' : isKubis ? '32.1' : '130.2'}M`} centerLabel="NILAI EKSPORT" data={exportRoutes} />
+                      <TradeDonutChart isDarkMode={isDarkMode} colors={['#f97316', '#f59e0b', '#ef4444']} legendPos="right" centerValue={`RM ${globalTradeStats.export.total.toFixed(1)}M`} centerLabel="NILAI EKSPORT" data={exportRoutes} />
                     </div>
                   </div>
                 </div>
@@ -377,13 +587,16 @@ export default function HalamanUtama({ isDarkMode = false }) {
                 <div className="flex items-center gap-3">
                   <div className="bg-emerald-100 dark:bg-emerald-500/20 p-2 rounded text-emerald-600 dark:text-emerald-400"><Factory className="w-5 h-5" /></div>
                   <h3 className="font-bold text-base md:text-lg tracking-wider uppercase text-slate-800 dark:text-emerald-100">Insight Pembekalan {selectedRegion && <span className="text-emerald-500">({selectedRegion})</span>}</h3>
+                  {dashboardLoading && <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 animate-pulse">Memuatkan data...</span>}
+                  {dashboardError && <span className="text-[9px] font-bold uppercase tracking-wider text-red-500" title={dashboardError}>Data sheet tidak disambung — lihat sheetsConfig.js</span>}
+                  {!dashboardLoading && !dashboardError && (liveFlags.map || liveFlags.pengeluaran || liveFlags.penggunaan || liveFlags.pie) && <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-500">● Data Langsung</span>}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-emerald-500 cursor-pointer shadow-sm"><option value="2025">2025</option><option value="2024">2024</option></select>
                   <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-emerald-500 cursor-pointer shadow-sm"><option value="">Semua Bulan</option><option value="jan">Januari</option><option value="feb">Februari</option><option value="mac">Mac</option><option value="apr">April</option><option value="mei">Mei</option><option value="jun">Jun</option><option value="jul">Julai</option><option value="ogo">Ogos</option><option value="sep">September</option><option value="okt">Oktober</option><option value="nov">November</option><option value="dis">Disember</option></select>
                   <select value={selectedNegeri} onChange={(e) => setSelectedNegeri(e.target.value)} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-emerald-500 cursor-pointer shadow-sm"><option value="">Semua Negeri</option><option value="johor">Johor</option><option value="kedah">Kedah</option><option value="kelantan">Kelantan</option><option value="melaka">Melaka</option><option value="negeri_sembilan">Negeri Sembilan</option><option value="pahang">Pahang</option><option value="perak">Perak</option><option value="perlis">Perlis</option><option value="pulau_pinang">Pulau Pinang</option><option value="sabah">Sabah</option><option value="sarawak">Sarawak</option><option value="selangor">Selangor</option><option value="terengganu">Terengganu</option><option value="kl">W.P. Kuala Lumpur</option></select>
-                  <select value={selectedCategory} onChange={(e) => {setSelectedCategory(e.target.value); setSelectedCommodity("");}} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-emerald-500 cursor-pointer shadow-sm"><option value="">Semua Kategori</option><option value="buah">Buah-Buahan</option><option value="sayur">Sayur-Sayuran</option></select>
-                  <select value={selectedCommodity} onChange={(e) => setSelectedCommodity(e.target.value)} disabled={!selectedCategory} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-emerald-500 cursor-pointer shadow-sm disabled:opacity-50"><option value="">Semua Komoditi</option>{selectedCategory === "buah" && <option value="tembikai">Tembikai</option>}{selectedCategory === "sayur" && <><option value="cili">Cili</option><option value="kubis">Kubis</option></>}</select>
+                  <select value={selectedCategory} onChange={(e) => {setSelectedCategory(e.target.value); setSelectedCommodity("");}} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-emerald-500 cursor-pointer shadow-sm"><option value="">Semua Kategori</option>{activeCategoryTree.categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}</select>
+                  <select value={selectedCommodity} onChange={(e) => setSelectedCommodity(e.target.value)} disabled={!selectedCategory} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-emerald-500 cursor-pointer shadow-sm disabled:opacity-50"><option value="">Semua Komoditi</option>{commodityOptionsForSelectedCategory.map((com) => <option key={com} value={com}>{com}</option>)}</select>
                 </div>
               </div>
 

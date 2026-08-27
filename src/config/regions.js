@@ -1,0 +1,16 @@
+export const STATE_DISTRICTS_MAP = {
+  'Johor': ['Kluang', 'Batu Pahat', 'Muar', 'Segamat', 'Pontian'],
+  'Kedah': ['Baling', 'Sik', 'Kota Setar', 'Kuala Muda', 'Kubang Pasu'],
+  'Kelantan': ['Pasir Mas', 'Gua Musang', 'Tumpat', 'Tanah Merah', 'Kuala Krai'],
+  'Melaka': ['Alor Gajah', 'Jasin', 'Melaka Tengah', 'Ayer Keroh', 'Masjid Tanah'],
+  'Negeri Sembilan': ['Jempol', 'Kuala Pilah', 'Tampin', 'Seremban', 'Rembau'],
+  'Pahang': ['Cameron Highlands', 'Jerantut', 'Bentong', 'Raub', 'Temerloh'],
+  'Perak': ['Kinta', 'Hulu Perak', 'Manjung', 'Batang Padang', 'Hilir Perak'],
+  'Perlis': ['Padang Besar', 'Arau', 'Kangar', 'Kaki Bukit', 'Simpang Empat'],
+  'Pulau Pinang': ['Seberang Perai Utara', 'S.P. Selatan', 'S.P. Tengah', 'Barat Daya', 'Timur Laut'],
+  'Sabah': ['Ranau', 'Kundasang', 'Papar', 'Keningau', 'Tambunan'],
+  'Sarawak': ['Belaga', 'Miri', 'Bintulu', 'Kapit', 'Sibu'],
+  'Selangor': ['Hulu Langat', 'Kuala Selangor', 'Gombak', 'Klang', 'Sepang'],
+  'Terengganu': ['Besut', 'Setiu', 'Hulu Terengganu', 'Dungun', 'Kemaman'],
+  'W.P. Kuala Lumpur': ['Kepong', 'Cheras', 'Wangsa Maju', 'Seputeh', 'Setiawangsa'],
+};
