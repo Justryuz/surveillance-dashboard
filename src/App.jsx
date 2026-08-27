@@ -16,17 +16,17 @@ export default function App() {
       <div className={`${isDarkMode ? 'dark' : ''} font-sans relative h-full w-full`}>
         
         {/* h-full instead of h-screen so it respects iframe/container height */}
-        <div className="h-full w-full bg-slate-50 dark:bg-slate-950 p-2 md:p-4 flex flex-col transition-colors duration-300">
+        <div className="h-full w-full bg-slate-50 dark:bg-slate-950 p-1 md:p-2 flex flex-col transition-colors duration-300">
           
           {/* Card Container — overflow-hidden so inner flex chain works correctly */}
-          <div className="flex-1 min-h-0 w-full bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-3 md:p-4 flex flex-col relative transition-colors duration-300 overflow-hidden">
+          <div className="flex-1 min-h-0 w-full bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-2 md:p-3 flex flex-col relative transition-colors duration-300 overflow-hidden">
             
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="absolute top-3 right-4 md:top-4 md:right-5 p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors z-50 shrink-0"
+              className="absolute top-2 right-3 md:top-3 md:right-4 p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors z-50 shrink-0"
               title="Toggle Theme"
             >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
             {/* Menu Header (Fixed Height) */}

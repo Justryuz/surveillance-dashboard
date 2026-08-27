@@ -529,20 +529,20 @@ export default function HalamanUtama({ isDarkMode = false }) {
   };
 
   return (
-    <div className="flex flex-col gap-2 h-full w-full relative">
-      <div className="shrink-0 flex flex-col items-center justify-center bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-blue-500/30 rounded-xl p-2 md:p-3 shadow-sm dark:shadow-[0_0_15px_rgba(59,130,246,0.1)]">
-        <h2 className="text-lg md:text-xl font-bold text-blue-700 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-blue-400 dark:to-cyan-300 uppercase tracking-widest text-center">PENGAWASAN BEKALAN & PASARAN NASIONAL</h2>
+    <div className="flex flex-col gap-1 h-full w-full relative">
+      <div className="shrink-0 flex flex-col items-center justify-center bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-blue-500/30 rounded-lg p-1.5 md:p-2 shadow-sm dark:shadow-[0_0_15px_rgba(59,130,246,0.1)]">
+        <h2 className="text-sm md:text-base font-bold text-blue-700 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-blue-400 dark:to-cyan-300 uppercase tracking-widest text-center">PENGAWASAN BEKALAN & PASARAN NASIONAL</h2>
       </div>
 
-      <div className="flex items-center justify-between gap-3 flex-1 min-h-0 mt-1">
+      <div className="flex items-center justify-between gap-2 flex-1 min-h-0 mt-0.5">
         <button onClick={handlePrev} className="shrink-0 p-2 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-blue-500/30 rounded-full text-slate-600 dark:text-blue-400 hover:bg-slate-100 hover:text-blue-600 transition-all"><ChevronLeft className="w-6 h-6 md:w-8 md:h-8" /></button>
 
         <div className="flex-1 w-full h-full min-h-0 transition-all duration-500">
           
           {/* VIEW 0: INSIGHT PERDAGANGAN */}
           {currentView === 0 && (
-            <div className="flex flex-col h-full w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-blue-500/20 rounded-xl p-4 md:p-6 shadow-sm dark:shadow-[inset_0_0_30px_rgba(59,130,246,0.1)] animate-in fade-in zoom-in-95 duration-500">
-              <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 dark:border-blue-500/30 pb-3 mb-3 gap-3">
+            <div className="flex flex-col h-full w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-blue-500/20 rounded-lg p-2 md:p-3 shadow-sm dark:shadow-[inset_0_0_30px_rgba(59,130,246,0.1)] animate-in fade-in zoom-in-95 duration-500">
+              <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 dark:border-blue-500/30 pb-2 mb-2 gap-2">
                 <div className="flex items-center gap-3">
                   <div className="bg-blue-100 dark:bg-blue-500/20 p-2 rounded text-blue-600 dark:text-blue-400"><Globe className="w-5 h-5" /></div>
                   <h3 className="font-bold text-base md:text-lg tracking-wider uppercase text-slate-800 dark:text-blue-100">Insight Perdagangan {globalTradeStats.perspective !== 'MALAYSIA' && <span className="text-blue-500">({globalTradeStats.countryName})</span>}</h3>
