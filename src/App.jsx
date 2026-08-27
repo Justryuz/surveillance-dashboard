@@ -11,7 +11,7 @@ import Pemborongan from './pages/Pemborongan';
 function AppContent() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [searchParams] = useSearchParams();
-  const isEmbedded = searchParams.get('embed') === '1';
+  const isEmbedded = searchParams.get('embed') === '1' || window.self !== window.top;
 
   return (
     <div className={`${isDarkMode ? 'dark' : ''} font-sans relative h-full w-full`}>

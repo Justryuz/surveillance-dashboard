@@ -561,12 +561,12 @@ export default function HalamanUtama({ isDarkMode = false, isEmbedded = false })
                 </div>
               </div>
               <div className="flex flex-col md:flex-row flex-1 min-h-0 gap-2">
-                <div className="flex-[1.1] w-full bg-slate-50 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700/50 p-2 flex flex-col relative overflow-hidden min-h-[200px] shadow-sm">
+                <div className="flex-1 w-full bg-slate-50 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700/50 p-2 flex flex-col relative overflow-hidden min-h-[200px] shadow-sm">
                   <MalaysiaFlowMap selectedCommodity={selectedCommodity} selectedYear={selectedYear} onCountryClick={(country) => setSelectedCountry(country)} onResetMap={() => setSelectedCountry(null)} realCountryStats={realCountryStats} />
                 </div>
-                <div className="flex-[0.9] flex flex-col gap-3 min-h-0 h-full">
-                  <div className="flex-[1.1] flex gap-3 min-h-0 w-full"><TradeRankingCard title="Sumber Utama (Import)" data={globalTradeStats.import} type="import" themeClass="text-blue-600 dark:text-cyan-400 border-blue-200 dark:border-cyan-800" /><TradeRankingCard title="Pasaran Utama (Eksport)" data={globalTradeStats.export} type="export" themeClass="text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800" /></div>
-                  <div className="flex-1 flex gap-3 min-h-0 w-full">
+                <div className="flex-1 flex flex-col gap-2 min-h-0 h-full">
+                  <div className="flex-[1.2] flex gap-2 min-h-0 w-full"><TradeRankingCard title="Sumber Utama (Import)" data={globalTradeStats.import} type="import" themeClass="text-blue-600 dark:text-cyan-400 border-blue-200 dark:border-cyan-800" /><TradeRankingCard title="Pasaran Utama (Eksport)" data={globalTradeStats.export} type="export" themeClass="text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800" /></div>
+                  <div className="flex-1 flex gap-2 min-h-0 w-full">
                     <div className="flex-1 bg-slate-50 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700/50 p-2 flex flex-col relative overflow-hidden min-h-[120px] shadow-sm h-full w-full">
                       <h4 className="flex items-center justify-center gap-2 text-[10px] md:text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 font-bold shrink-0"><div className="w-3.5 md:w-20 shrink-0" /><span>NILAI IMPORT</span><div className="w-3.5 h-3.5 md:w-5 md:h-5 rounded-full overflow-hidden shrink-0 shadow-sm border border-slate-200 dark:border-slate-700"><img src="https://flagcdn.com/my.svg" alt="Malaysia" className="w-full h-full object-cover scale-125" /></div></h4>
                       <TradeDonutChart isDarkMode={isDarkMode} colors={['#3b82f6', '#0ea5e9', '#6366f1']} legendPos="left" centerValue={`RM ${globalTradeStats.import.total.toFixed(1)}M`} centerLabel="NILAI IMPORT" data={importRoutes} />
