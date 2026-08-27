@@ -18,7 +18,7 @@ import { COMMODITY_KEYWORDS, NEGERI_CODE_TO_LABEL } from '../config/sheetsConfig
 import { FLOW_MAP_COUNTRY_KEYWORDS } from '../config/countryKeywords';
 import { STATE_DISTRICTS_MAP } from '../config/regions';
 
-export default function HalamanUtama({ isDarkMode = false }) {
+export default function HalamanUtama({ isDarkMode = false, isEmbedded = false }) {
   // --- LIVE DATA FROM GOOGLE SHEET ---
   // useTradeData -> IMPORT / EXPORT tabs (trade totals + top-5 countries)
   // useDashboardData -> PRODUCTION, CONSUMPTION_BY_STATE, MARKET_FLOW,
@@ -530,9 +530,11 @@ export default function HalamanUtama({ isDarkMode = false }) {
 
   return (
     <div className="flex flex-col gap-1 h-full w-full relative">
-      <div className="shrink-0 flex flex-col items-center justify-center bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-blue-500/30 rounded-lg p-1.5 md:p-2 shadow-sm dark:shadow-[0_0_15px_rgba(59,130,246,0.1)]">
-        <h2 className="text-sm md:text-base font-bold text-blue-700 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-blue-400 dark:to-cyan-300 uppercase tracking-widest text-center">PENGAWASAN BEKALAN & PASARAN NASIONAL</h2>
-      </div>
+      {!isEmbedded && (
+        <div className="shrink-0 flex flex-col items-center justify-center bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-blue-500/30 rounded-lg p-1.5 md:p-2 shadow-sm dark:shadow-[0_0_15px_rgba(59,130,246,0.1)]">
+          <h2 className="text-sm md:text-base font-bold text-blue-700 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-blue-400 dark:to-cyan-300 uppercase tracking-widest text-center">PENGAWASAN BEKALAN & PASARAN NASIONAL</h2>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-2 flex-1 min-h-0 mt-0.5">
         <button onClick={handlePrev} className="shrink-0 p-1.5 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-blue-500/30 rounded-full text-slate-600 dark:text-blue-400 hover:bg-slate-100 hover:text-blue-600 transition-all"><ChevronLeft className="w-5 h-5 md:w-6 md:h-6" /></button>
@@ -751,10 +753,12 @@ export default function HalamanUtama({ isDarkMode = false }) {
         <button onClick={handleNext} className="shrink-0 p-1.5 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-blue-500/30 rounded-full text-slate-600 dark:text-blue-400 hover:bg-slate-100 hover:text-blue-600 transition-all"><ChevronRight className="w-5 h-5 md:w-6 md:h-6" /></button>
       </div>
 
-      <div className="shrink-0 flex items-center justify-between mt-0.5 pb-0.5 px-2 md:px-4">
-        <div className="flex flex-col text-[7px] md:text-[8px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-semibold"><span>Sumber Data: KPKM | DOA | FAMA | Tridge</span><span>Data Rujukan: Data Perdagangan | Data Pengeluaran | Data Penggunaan | Data KPASM | Data Kajian Profiling | Tridge</span></div>
-        <div className="flex gap-2">{[0, 1].map((index) => (<div key={index} onClick={() => setCurrentView(index)} className={`cursor-pointer w-2.5 h-2.5 rounded-full transition-all duration-300 ${currentView === index ? 'bg-blue-600 dark:bg-cyan-400 shadow-sm scale-125' : 'bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500'}`} title={viewTitles[index]} />))}</div>
-      </div>
+      {!isEmbedded && (
+        <div className="shrink-0 flex items-center justify-between mt-0.5 pb-0.5 px-2 md:px-4">
+          <div className="flex flex-col text-[7px] md:text-[8px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-semibold"><span>Sumber Data: KPKM | DOA | FAMA | Tridge</span><span>Data Rujukan: Data Perdagangan | Data Pengeluaran | Data Penggunaan | Data KPASM | Data Kajian Profiling | Tridge</span></div>
+          <div className="flex gap-2">{[0, 1].map((index) => (<div key={index} onClick={() => setCurrentView(index)} className={`cursor-pointer w-2.5 h-2.5 rounded-full transition-all duration-300 ${currentView === index ? 'bg-blue-600 dark:bg-cyan-400 shadow-sm scale-125' : 'bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500'}`} title={viewTitles[index]} />))}</div>
+        </div>
+      )}
     </div>
   );
 }
