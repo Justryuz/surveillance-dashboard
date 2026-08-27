@@ -535,7 +535,7 @@ export default function HalamanUtama({ isDarkMode = false }) {
       </div>
 
       <div className="flex items-center justify-between gap-2 flex-1 min-h-0 mt-0.5">
-        <button onClick={handlePrev} className="shrink-0 p-2 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-blue-500/30 rounded-full text-slate-600 dark:text-blue-400 hover:bg-slate-100 hover:text-blue-600 transition-all"><ChevronLeft className="w-6 h-6 md:w-8 md:h-8" /></button>
+        <button onClick={handlePrev} className="shrink-0 p-1.5 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-blue-500/30 rounded-full text-slate-600 dark:text-blue-400 hover:bg-slate-100 hover:text-blue-600 transition-all"><ChevronLeft className="w-5 h-5 md:w-6 md:h-6" /></button>
 
         <div className="flex-1 w-full h-full min-h-0 transition-all duration-500">
           
@@ -558,7 +558,7 @@ export default function HalamanUtama({ isDarkMode = false }) {
                   <select value={selectedCommodity} onChange={(e) => setSelectedCommodity(e.target.value)} disabled={!selectedCategory} className="text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm transition-colors disabled:opacity-50"><option value="">Semua Komoditi</option>{commodityOptionsForSelectedCategory.map((com) => <option key={com} value={com}>{com}</option>)}</select>
                 </div>
               </div>
-              <div className="flex flex-col md:flex-row flex-1 min-h-0 gap-4">
+              <div className="flex flex-col md:flex-row flex-1 min-h-0 gap-2">
                 <div className="flex-[1.1] w-full bg-slate-50 dark:bg-slate-800/40 rounded border border-slate-200 dark:border-slate-700/50 p-2 flex flex-col relative overflow-hidden min-h-[200px] shadow-sm">
                   <MalaysiaFlowMap selectedCommodity={selectedCommodity} selectedYear={selectedYear} onCountryClick={(country) => setSelectedCountry(country)} onResetMap={() => setSelectedCountry(null)} realCountryStats={realCountryStats} />
                 </div>
@@ -581,9 +581,9 @@ export default function HalamanUtama({ isDarkMode = false }) {
 
           {/* VIEW 1: INSIGHT PEMBEKALAN */}
           {currentView === 1 && (
-            <div className="flex flex-col h-full w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-emerald-500/20 rounded-xl p-4 md:p-6 shadow-sm dark:shadow-[inset_0_0_30px_rgba(16,185,129,0.1)] animate-in fade-in zoom-in-95 duration-500">
+            <div className="flex flex-col h-full w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-emerald-500/20 rounded-lg p-2 md:p-3 shadow-sm dark:shadow-[inset_0_0_30px_rgba(16,185,129,0.1)] animate-in fade-in zoom-in-95 duration-500">
               
-              <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 dark:border-emerald-500/30 pb-3 mb-3 gap-3">
+              <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 dark:border-emerald-500/30 pb-2 mb-2 gap-2">
                 <div className="flex items-center gap-3">
                   <div className="bg-emerald-100 dark:bg-emerald-500/20 p-2 rounded text-emerald-600 dark:text-emerald-400"><Factory className="w-5 h-5" /></div>
                   <h3 className="font-bold text-base md:text-lg tracking-wider uppercase text-slate-800 dark:text-emerald-100">Insight Pembekalan {selectedRegion && <span className="text-emerald-500">({selectedRegion})</span>}</h3>
@@ -600,10 +600,10 @@ export default function HalamanUtama({ isDarkMode = false }) {
                 </div>
               </div>
 
-              <div className="flex flex-col flex-1 min-h-0 gap-3">
+              <div className="flex flex-col flex-1 min-h-0 gap-2">
                 
                 {/* TOP KPI CARDS */}
-                <div className="flex gap-4 shrink-0">
+                <div className="flex gap-2 shrink-0">
                   <div className="flex-[1.2] flex items-center bg-slate-50 dark:bg-slate-950 px-6 py-3 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
                     
                     {/* Left Side: BEKALAN TAHUNAN */}
@@ -679,7 +679,7 @@ export default function HalamanUtama({ isDarkMode = false }) {
                 </div>
 
                 {/* BOTTOM MAP, LISTS, PIE LAYOUT */}
-                <div className="flex gap-4 flex-1 min-h-0">
+                <div className="flex gap-2 flex-1 min-h-0">
                   
                   {/* Left: Map */}
                   <div className="flex-[1.2] bg-slate-50 dark:bg-slate-800/40 rounded-lg border border-slate-200 dark:border-slate-700/50 p-2 flex flex-col relative overflow-hidden min-h-[200px] shadow-sm">
@@ -748,12 +748,12 @@ export default function HalamanUtama({ isDarkMode = false }) {
   
         </div>
 
-        <button onClick={handleNext} ><ChevronRight className="w-6 h-6 md:w-8 md:h-8" /></button>
+        <button onClick={handleNext} className="shrink-0 p-1.5 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-blue-500/30 rounded-full text-slate-600 dark:text-blue-400 hover:bg-slate-100 hover:text-blue-600 transition-all"><ChevronRight className="w-5 h-5 md:w-6 md:h-6" /></button>
       </div>
 
-      <div className="shrink-0 flex items-center justify-between mt-1 pb-1 px-4 md:px-15">
-        <div className="flex flex-col text-[8px] md:text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-semibold"><span>Sumber Data: KPKM | DOA | FAMA | Tridge</span><span>Data Rujukan: Data Perdagangan | Data Pengeluaran | Data Penggunaan | Data KPASM | Data Kajian Profiling | Tridge</span></div>
-        <div className="flex gap-3">{[0, 1].map((index) => (<div key={index} onClick={() => setCurrentView(index)} className={`cursor-pointer w-3 h-3 rounded-full transition-all duration-300 ${currentView === index ? 'bg-blue-600 dark:bg-cyan-400 shadow-sm scale-125' : 'bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500'}`} title={viewTitles[index]} />))}</div>
+      <div className="shrink-0 flex items-center justify-between mt-0.5 pb-0.5 px-2 md:px-4">
+        <div className="flex flex-col text-[7px] md:text-[8px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-semibold"><span>Sumber Data: KPKM | DOA | FAMA | Tridge</span><span>Data Rujukan: Data Perdagangan | Data Pengeluaran | Data Penggunaan | Data KPASM | Data Kajian Profiling | Tridge</span></div>
+        <div className="flex gap-2">{[0, 1].map((index) => (<div key={index} onClick={() => setCurrentView(index)} className={`cursor-pointer w-2.5 h-2.5 rounded-full transition-all duration-300 ${currentView === index ? 'bg-blue-600 dark:bg-cyan-400 shadow-sm scale-125' : 'bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500'}`} title={viewTitles[index]} />))}</div>
       </div>
     </div>
   );
