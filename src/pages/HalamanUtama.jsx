@@ -532,6 +532,7 @@ export default function HalamanUtama({ isDarkMode = false, isEmbedded = false })
   const TradeRankingCard = ({ title, data, type, themeClass }) => {
     const isMalaysiaMode = globalTradeStats.perspective === 'MALAYSIA';
     const countryLabel = isMalaysiaMode ? "Malaysia" : globalTradeStats.countryName;
+    const shareBarClass = type === 'import' ? 'bg-blue-500 dark:bg-cyan-500' : 'bg-orange-500 dark:bg-orange-400';
     // A zero total in Malaysia-perspective mode covers both "sheet not
     // ready yet" and a genuine real zero-result — either way there's
     // nothing meaningful to rank, so show a placeholder instead of an
@@ -549,17 +550,26 @@ export default function HalamanUtama({ isDarkMode = false, isEmbedded = false })
         <h4 className={`text-[9px] md:text-[10px] xl:text-xs uppercase tracking-wider mb-1.5 md:mb-2 font-bold border-b border-slate-200 dark:border-slate-700 pb-1 ${themeClass}`}>{isMalaysiaMode ? title : `${title} - ${countryLabel}`}</h4>
         <div className="flex flex-col flex-1 min-h-0 text-[9px] md:text-[10px]">
           <div className="flex text-slate-400 font-semibold mb-1 px-1 shrink-0"><span className="w-4 text-center"></span><span className="flex-1">Negara</span><span className="w-14 text-right">Nilai (RM)</span><span className="w-9 text-right">Syer</span></div>
-          {/* Scrollable so the top-5 rows shrink to fit instead of pushing
-              the Dagangan total row below (and outside) the card at browser
-              zoom levels where there isn't quite enough vertical room. */}
-          <div className="flex flex-col justify-between flex-1 min-h-0 overflow-y-auto">
+          {/* Each row carries a share bar, and rows spread evenly over the
+              card height (justify-evenly) so tall cards are filled without
+              looking gappy; gap-1 keeps a minimum spacing on short cards.
+              min-h-0 + overflow-y-auto lets the list shrink and scroll
+              instead of pushing the Dagangan total row outside the card at
+              browser zoom levels where there isn't enough vertical room. */}
+          <div className="flex flex-col justify-evenly gap-1 md:gap-1.5 flex-1 min-h-0 overflow-y-auto">
             {data.top5.map((item) => (
-              <div key={item.rank} className="flex items-center px-1 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded transition-colors"><span className="w-4 text-center font-bold text-slate-500">{item.rank}</span><span className="flex-1 font-medium text-slate-700 dark:text-slate-300 truncate">{item.name}</span><span className="w-14 text-right font-bold text-slate-800 dark:text-slate-200">{formatFixed(item.value, 1)}M</span><span className="w-9 text-right text-slate-500">{item.percent.toFixed(1)}%</span></div>
+              <div key={item.rank} className="flex flex-col gap-0.5 px-1 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded transition-colors">
+                <div className="flex items-center"><span className="w-4 text-center font-bold text-slate-500">{item.rank}</span><span className="flex-1 font-medium text-slate-700 dark:text-slate-300 truncate">{item.name}</span><span className="w-14 text-right font-bold text-slate-800 dark:text-slate-200">{formatFixed(item.value, 1)}M</span><span className="w-9 text-right text-slate-500">{item.percent.toFixed(1)}%</span></div>
+                <div className="ml-4 h-1 md:h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className={`h-full rounded-full ${shareBarClass}`} style={{ width: `${Math.min(Math.max(item.percent, 0), 100)}%` }} /></div>
+              </div>
             ))}
             {!isMalaysiaMode && (
               <div className="flex items-center px-1 py-1 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-100 dark:border-blue-800/50 shadow-sm"><span className="w-4 text-center font-bold text-blue-600 dark:text-cyan-400">{data.malaysiaStanding.rank}</span><span className="flex-1 font-bold text-blue-700 dark:text-blue-300">Kedudukan Malaysia</span><span className="w-14 text-right font-bold text-blue-700 dark:text-blue-300">{formatFixed(data.malaysiaStanding.value, 1)}M</span><span className="w-9 text-right font-bold text-blue-600 dark:text-cyan-400">{data.malaysiaStanding.percent.toFixed(1)}%</span></div>
             )}
-            <div className="flex items-center px-1 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded transition-colors"><span className="w-4 text-center font-bold text-slate-500">6</span><span className="flex-1 font-medium text-slate-700 dark:text-slate-300 truncate">Lain-lain Negara</span><span className="w-14 text-right font-bold text-slate-800 dark:text-slate-200">{formatFixed(data.others.value, 1)}M</span><span className="w-9 text-right text-slate-500">{data.others.percent.toFixed(1)}%</span></div>
+            <div className="flex flex-col gap-0.5 px-1 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded transition-colors">
+              <div className="flex items-center"><span className="w-4 text-center font-bold text-slate-500">6</span><span className="flex-1 font-medium text-slate-700 dark:text-slate-300 truncate">Lain-lain Negara</span><span className="w-14 text-right font-bold text-slate-800 dark:text-slate-200">{formatFixed(data.others.value, 1)}M</span><span className="w-9 text-right text-slate-500">{data.others.percent.toFixed(1)}%</span></div>
+              <div className="ml-4 h-1 md:h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full rounded-full bg-slate-400 dark:bg-slate-500" style={{ width: `${Math.min(Math.max(data.others.percent, 0), 100)}%` }} /></div>
+            </div>
           </div>
           {/* Always-visible footer, outside the scroll area, so the total
               row can never be pushed off/outside the card. */}
