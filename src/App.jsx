@@ -1,13 +1,21 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, useSearchParams } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
 import SubNav from './components/layout/SubNav';
 import ErrorBoundary from './components/common/ErrorBoundary';
 
+// Home page loads with the main bundle; the other pages are split into their
+// own chunks and only downloaded when the user opens them.
 import HalamanUtama from './pages/HalamanUtama';
-import Pembekalan from './pages/Pembekalan';
-import Permintaan from './pages/Permintaan';
-import Pemborongan from './pages/Pemborongan';
+const Pembekalan = lazy(() => import('./pages/Pembekalan'));
+const Permintaan = lazy(() => import('./pages/Permintaan'));
+const Pemborongan = lazy(() => import('./pages/Pemborongan'));
+
+const PageLoading = () => (
+  <div className="h-full w-full flex items-center justify-center text-slate-400 text-xs animate-pulse">
+    Memuatkan halaman...
+  </div>
+);
 
 function AppContent() {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -45,13 +53,15 @@ function AppContent() {
           <div className="flex-1 min-h-0 w-full text-slate-800 dark:text-slate-200 mt-1 overflow-hidden">
             <div className="h-full w-full">
               <ErrorBoundary>
-                <Routes>
-                  {/* Propagating theme parameter to HalamanUtama component */}
-                  <Route path="/" element={<HalamanUtama isDarkMode={isDarkMode} isEmbedded={isEmbedded} />} />
-                  <Route path="/pembekalan" element={<Pembekalan />} />
-                  <Route path="/permintaan" element={<Permintaan />} />
-                  <Route path="/pemborongan" element={<Pemborongan />} />
-                </Routes>
+                <Suspense fallback={<PageLoading />}>
+                  <Routes>
+                    {/* Propagating theme parameter to HalamanUtama component */}
+                    <Route path="/" element={<HalamanUtama isDarkMode={isDarkMode} isEmbedded={isEmbedded} />} />
+                    <Route path="/pembekalan" element={<Pembekalan />} />
+                    <Route path="/permintaan" element={<Permintaan />} />
+                    <Route path="/pemborongan" element={<Pemborongan />} />
+                  </Routes>
+                </Suspense>
               </ErrorBoundary>
             </div>
           </div>
