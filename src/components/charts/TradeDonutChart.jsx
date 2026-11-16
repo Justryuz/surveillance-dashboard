@@ -7,10 +7,29 @@ export default function TradeDonutChart({
   legendPos = 'left', 
   centerValue = '0', 
   centerLabel = 'Jumlah', 
-  isDarkMode = false 
+  isDarkMode = false,
+  emptyMessage = 'Tiada data pelabuhan/pengangkutan tersedia buat masa ini',
 }) {
+  const hasData = Array.isArray(data) && data.length > 0;
+
   // Push the donut to the opposite side of the legend
   const centerX = legendPos === 'left' ? '65%' : '35%';
+
+  if (!hasData) {
+    return (
+      <div className="w-full h-full flex-1 relative flex flex-col items-center justify-center min-h-0 gap-2 px-4 text-center">
+        <span className={`font-black text-sm md:text-base leading-none tracking-tight ${isDarkMode ? 'text-slate-50' : 'text-slate-800'}`}>
+          {centerValue}
+        </span>
+        <span className={`font-bold text-[8px] md:text-[9px] uppercase tracking-wider leading-none ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+          {centerLabel}
+        </span>
+        <span className={`text-[9px] italic mt-1 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+          {emptyMessage}
+        </span>
+      </div>
+    );
+  }
 
   // Inject SVG Icons into the Legend
   const legendData = data.map(item => {
@@ -29,7 +48,7 @@ export default function TradeDonutChart({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {c}%',
+      formatter: (p) => `${p.name}: ${Number(p.value || 0).toFixed(2)}%`,
       backgroundColor: 'rgba(15, 23, 42, 0.9)',
       borderColor: colors[0], 
       borderWidth: 1,
@@ -85,7 +104,7 @@ export default function TradeDonutChart({
   return (
     <div className="w-full h-full flex-1 relative flex flex-col justify-center min-h-0">
       
-      {/* Chart fills container via absolute positioning — prevents unbounded height in iframes */}
+      {/* 1. The Donut Chart Layer — absolute inset-0 prevents unbounded height in iframes */}
       <div className="absolute inset-0">
         <ReactECharts 
           option={option} 
@@ -95,13 +114,13 @@ export default function TradeDonutChart({
         />
       </div>
 
-      {/* HTML Overlay Layer for center label */}
+      {/* 2. The HTML Flex Overlay Layer (Guarantees perfect center alignment) */}
       <div 
         className="absolute top-1/2 flex flex-col items-center justify-center pointer-events-none"
         style={{ 
           left: centerX, 
-          transform: 'translate(-50%, -50%)',
-          width: '50%'
+          transform: 'translate(-50%, -50%)', // Mathematically centers the div
+          width: '50%' // Keeps text safely constrained inside the donut ring
         }}
       >
         <span className={`font-black text-sm md:text-base leading-none tracking-tight mb-1 ${isDarkMode ? 'text-slate-50' : 'text-slate-800'}`}>

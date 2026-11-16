@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local data files (large Excel exports) — data is loaded from Google Sheets
+data/
