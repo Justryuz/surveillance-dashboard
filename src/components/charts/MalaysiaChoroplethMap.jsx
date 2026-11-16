@@ -1,25 +1,42 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import * as echarts from 'echarts';
 import { RotateCcw } from 'lucide-react';
 
-export default function MalaysiaChoroplethMap({ 
-  mapViewMode, 
-  setMapViewMode, 
-  mapData, 
-  onRegionClick, 
+// malaysia_district.geojson tags each district feature with its parent
+// state as a 3-letter code (properties.state), not the full name — this
+// maps our canonical Negeri labels (ALL_STATES / NEGERI_CODE_TO_LABEL) to
+// those codes so districts can be filtered down to one state.
+const STATE_LABEL_TO_DISTRICT_CODE = {
+  'Johor': 'JHR', 'Kedah': 'KDH', 'Kelantan': 'KTN', 'Melaka': 'MLK',
+  'Negeri Sembilan': 'NSN', 'Pahang': 'PHG', 'Perak': 'PRK', 'Perlis': 'PLS',
+  'Pulau Pinang': 'PNG', 'Sabah': 'SBH', 'Sarawak': 'SWK', 'Selangor': 'SGR',
+  'Terengganu': 'TRG', 'W.P. Kuala Lumpur': 'KUL', 'W.P. Putrajaya': 'PJY', 'W.P. Labuan': 'LBN',
+};
+// malaysia_state.geojson names its Kuala Lumpur feature "Kuala Lumpur"
+// (not the canonical "W.P. Kuala Lumpur") — everything else matches as-is.
+const STATE_LABEL_TO_GEOJSON_NAME = { 'W.P. Kuala Lumpur': 'Kuala Lumpur', 'W.P. Putrajaya': 'Putrajaya', 'W.P. Labuan': 'Labuan' };
+
+export default function MalaysiaChoroplethMap({
+  mapViewMode,
+  setMapViewMode,
+  mapData,
+  onRegionClick,
   onResetMap,
-  selectedRegion,     
-  isDarkMode = false  
+  selectedRegion,
+  isDarkMode = false,
+  filterNegeri = null, // canonical Negeri label (e.g. "Johor") to crop the map to, or null for the whole country
 }) {
   const chartRef = useRef(null); // We bring ref back for the silver-bullet fix!
   const [mapsLoaded, setMapsLoaded] = useState({ state: false, district: false });
+  const [rawGeoJson, setRawGeoJson] = useState({ state: null, district: null });
 
   useEffect(() => {
     fetch('/malaysia_state.geojson')
       .then((res) => res.json())
       .then((geoJson) => {
         echarts.registerMap('malaysia_states', geoJson);
+        setRawGeoJson((prev) => ({ ...prev, state: geoJson }));
         setMapsLoaded(prev => ({ ...prev, state: true }));
       });
 
@@ -27,12 +44,45 @@ export default function MalaysiaChoroplethMap({
       .then((res) => res.json())
       .then((geoJson) => {
         echarts.registerMap('malaysia_districts', geoJson);
+        setRawGeoJson((prev) => ({ ...prev, district: geoJson }));
         setMapsLoaded(prev => ({ ...prev, district: true }));
       });
   }, []);
 
-  const currentMap = mapViewMode === 'state' ? 'malaysia_states' : 'malaysia_districts';
-  const isReady = mapsLoaded.state && mapsLoaded.district;
+  // When a Negeri filter is active, register a cropped version of each
+  // geojson containing only that state's (and its districts') features, so
+  // the map itself shows just that one state instead of all of Malaysia.
+  const scopedReady = useMemo(() => {
+    if (!filterNegeri || !rawGeoJson.state || !rawGeoJson.district) return false;
+    const geojsonStateName = STATE_LABEL_TO_GEOJSON_NAME[filterNegeri] || filterNegeri;
+    const districtCode = STATE_LABEL_TO_DISTRICT_CODE[filterNegeri];
+
+    const scopedStates = {
+      ...rawGeoJson.state,
+      features: rawGeoJson.state.features.filter((f) => f.properties?.name === geojsonStateName),
+    };
+    const scopedDistricts = {
+      ...rawGeoJson.district,
+      features: rawGeoJson.district.features.filter((f) => f.properties?.state === districtCode),
+    };
+    // SAFETY NET: a Negeri with no matching geojson features (e.g. a name
+    // that isn't in the lookup tables above) would register an empty map,
+    // which makes ECharts throw and blanks the whole page. Fall back to the
+    // full national map instead.
+    if (scopedStates.features.length === 0 || scopedDistricts.features.length === 0) {
+      console.warn(`Negeri "${filterNegeri}" tiada padanan dalam GeoJSON. Memaparkan peta penuh.`);
+      return 'unscoped';
+    }
+    echarts.registerMap('malaysia_states_scoped', scopedStates);
+    echarts.registerMap('malaysia_districts_scoped', scopedDistricts);
+    return true;
+  }, [filterNegeri, rawGeoJson]);
+
+  const isScoped = !!filterNegeri && scopedReady === true;
+  const currentMap = isScoped
+    ? (mapViewMode === 'state' ? 'malaysia_states_scoped' : 'malaysia_districts_scoped')
+    : (mapViewMode === 'state' ? 'malaysia_states' : 'malaysia_districts');
+  const isReady = mapsLoaded.state && mapsLoaded.district && (!filterNegeri || scopedReady);
 
   // THE FIX: Explicitly target the selected region by NAME and force it to turn off
   const handleReset = () => {
@@ -50,7 +100,7 @@ export default function MalaysiaChoroplethMap({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'item',
-      formatter: '{b}<br/>Bekalan: {c} MT',
+      formatter: (params) => `${params.name}<br/>Bekalan: ${Number(params.value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MT`,
       backgroundColor: isDarkMode ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
       borderColor: isDarkMode ? '#0ea5e9' : '#3b82f6',
       textStyle: { color: isDarkMode ? '#f8fafc' : '#1e293b' }
@@ -72,10 +122,13 @@ export default function MalaysiaChoroplethMap({
         name: 'Status Bekalan',
         type: 'map',
         map: currentMap,
-        selectedMode: 'single', 
+        selectedMode: 'single',
         roam: true,
-        zoom: 1.2,
-        center: [109.0, 4.0],
+        // Country-wide view uses a fixed zoom/center tuned for all of
+        // Malaysia; a Negeri-scoped view's geojson only contains that one
+        // state's shape, so zoom/center are left out and ECharts auto-fits
+        // it to the available space instead.
+        ...(isScoped ? {} : { zoom: 1.2, center: [109.0, 4.0] }),
         itemStyle: {
           areaColor: isDarkMode ? '#1e293b' : '#f8fafc',
           borderColor: isDarkMode ? '#38bdf8' : '#3b82f6', 
@@ -117,8 +170,9 @@ export default function MalaysiaChoroplethMap({
       
       {!isReady && <div className="flex-1 flex items-center justify-center text-slate-400 text-xs animate-pulse mt-8">Memuatkan Peta...</div>}
       
+      {/* absolute positioning: chart fills the container instead of growing with the iframe document */}
       {isReady && (
-        <div className="absolute inset-0 top-8 left-0 right-0 bottom-0">
+        <div className="absolute inset-0 top-8">
           <ReactECharts ref={chartRef} echarts={echarts} option={option} style={{ height: '100%', width: '100%' }} notMerge={true} onEvents={onEvents} />
         </div>
       )}

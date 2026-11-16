@@ -6,6 +6,42 @@ import {
 } from 'lucide-react';
 import MalaysiaFlowMap from '../components/charts/MalaysiaFlowMap';
 import MalaysiaPenggunaanMap from '../components/charts/MalaysiaPenggunaanMap';
+import SearchableSelect from '../components/common/SearchableSelect';
+import { useTradeData } from '../hooks/useTradeData';
+import { useDashboardData } from '../hooks/useDashboardData';
+import { useGlobalTradeFlow } from '../hooks/useGlobalTradeFlow';
+import { useProfilingPengeluar } from '../hooks/useProfilingPengeluar';
+import { computeQuantityTotal, computeValueTotal, computeTop5CountriesDetailed, computeCountryTradeStats } from '../lib/tradeAggregation';
+import { computeCountryNameMap, standardizeRowsCountryFields } from '../lib/countryStandardization';
+import { computeKomoditiNameMap, standardizeRowsKomoditiFields } from '../lib/komoditiStandardization';
+import { computeConsumptionTotalKg, computeTop5PenggunaanDetailed, computeConsumptionByState, computeConsumptionByStateDistrict, computeConsumptionSegmentBreakdown } from '../lib/consumptionAggregation';
+import { computeProductionByStateDistrict, computeNegeriDaerahTree, computeAllCommodities } from '../lib/productionAggregation';
+import { computeRouteSplits, computeTopPorts, computeImportTransactionDetails, computeTopCountryStateFlows } from '../lib/logisticsAggregation';
+import { computeYearlyTrendDemand, computeMonthlyTrendDemand } from '../lib/trendAggregation';
+import { computeSaluranPasaranFunnel, computeTopMarketCountries, computeTopMarketStates, computeTopMarketDistricts } from '../lib/marketFlowAggregation';
+import { computeTopPartners } from '../lib/globalTradeFlowAggregation';
+import { computeFormToNegeriMap, computeFormToDaerahMap } from '../lib/profilingAggregation';
+import { FLOW_MAP_COUNTRY_KEYWORDS } from '../config/countryKeywords';
+import { STATE_DISTRICTS_MAP } from '../config/regions';
+import { formatFixed } from '../lib/formatters';
+import { computeMtAxis } from '../lib/chartAxis';
+
+// Permintaan's own month filter uses 3-letter English abbreviations as the
+// underlying value (matched against BULAN_ABBR_TO_CODE below), unlike the
+// mixed Malay/English codes used elsewhere in the app — but is displayed
+// with full, uppercased Malay month names for consistency with the rest
+// of the filter bar.
+const BULAN_ABBR_TO_CODE = {
+  Jan: 'jan', Feb: 'feb', Mar: 'mac', Apr: 'apr', May: 'mei', Jun: 'jun',
+  Jul: 'jul', Aug: 'ogo', Sep: 'sep', Oct: 'okt', Nov: 'nov', Dec: 'dis',
+};
+const BULAN_OPTIONS = [
+  { value: 'All', label: 'ALL' },
+  { value: 'Jan', label: 'JANUARI' }, { value: 'Feb', label: 'FEBRUARI' }, { value: 'Mar', label: 'MAC' },
+  { value: 'Apr', label: 'APRIL' }, { value: 'May', label: 'MEI' }, { value: 'Jun', label: 'JUN' },
+  { value: 'Jul', label: 'JULAI' }, { value: 'Aug', label: 'OGOS' }, { value: 'Sep', label: 'SEPTEMBER' },
+  { value: 'Oct', label: 'OKTOBER' }, { value: 'Nov', label: 'NOVEMBER' }, { value: 'Dec', label: 'DISEMBER' },
+];
 
 export default function Permintaan({ isDarkMode = false }) {
   const [activeTab, setActiveTab] = useState(0); 
@@ -21,6 +57,84 @@ export default function Permintaan({ isDarkMode = false }) {
   const [mapToggle, setMapToggle] = useState('eksport'); 
   const [pasaranToggle, setPasaranToggle] = useState('Negeri'); 
 
+  // --- LIVE DATA FROM GOOGLE SHEET ---
+  const { importRows: rawImportRows, exportRows: rawExportRows, loading: tradeLoading, error: tradeError } = useTradeData();
+  const {
+    PRODUCTION: rawProductionRows,
+    CONSUMPTION_BY_STATE: rawConsumptionRows,
+    CONSUMPTION_BY_MONTH: rawConsumptionMonthRows,
+    MARKET_FLOW: rawMarketFlowRows,
+    TRADE_LOGISTIC: tradeLogisticRows,
+    REF_PORT: refPortRows,
+    REF_COUNTRY: refCountryRows,
+    REF_KOMODITI: refKomoditiRows,
+    loading: dashboardLoading,
+    error: dashboardError,
+  } = useDashboardData();
+  const { rows: globalTradeFlowRows, loading: globalTradeFlowLoading, error: globalTradeFlowError } = useGlobalTradeFlow();
+
+  // Standardize country names (via REF_COUNTRY) before they're used for
+  // any grouping/matching, so different raw spellings of the same country
+  // merge correctly instead of being treated as separate countries.
+  const countryNameMap = useMemo(() => {
+    if (dashboardLoading || dashboardError || refCountryRows.length === 0) return null;
+    return computeCountryNameMap(refCountryRows);
+  }, [dashboardLoading, dashboardError, refCountryRows]);
+
+  const importRowsCountryStd = useMemo(
+    () => standardizeRowsCountryFields(rawImportRows, countryNameMap, ['Negara']),
+    [rawImportRows, countryNameMap]
+  );
+  const exportRowsCountryStd = useMemo(
+    () => standardizeRowsCountryFields(rawExportRows, countryNameMap, ['Negara']),
+    [rawExportRows, countryNameMap]
+  );
+  const standardizedTradeLogisticRowsCountryStd = useMemo(
+    () => standardizeRowsCountryFields(tradeLogisticRows, countryNameMap, ['ORIGIN_COUNTRY', 'DESTINATION_COUNTRY']),
+    [tradeLogisticRows, countryNameMap]
+  );
+  const globalTradeFlowRowsCountryStd = useMemo(
+    () => standardizeRowsCountryFields(globalTradeFlowRows, countryNameMap, ['Reporter', 'Partner']),
+    [globalTradeFlowRows, countryNameMap]
+  );
+  const { rows: profilingRows, loading: profilingLoading, error: profilingError } = useProfilingPengeluar();
+
+  // Standardize commodity names/categories (via REF_KOMODITI), the same
+  // way country names are standardized above.
+  const komoditiMap = useMemo(() => {
+    if (dashboardLoading || dashboardError || refKomoditiRows.length === 0) return null;
+    return computeKomoditiNameMap(refKomoditiRows);
+  }, [dashboardLoading, dashboardError, refKomoditiRows]);
+
+  const productionRows = useMemo(
+    () => standardizeRowsKomoditiFields(rawProductionRows, komoditiMap, 'Standard Jenis Komoditi', 'Kategori Komoditi'),
+    [rawProductionRows, komoditiMap]
+  );
+  const consumptionRows = useMemo(
+    () => standardizeRowsKomoditiFields(rawConsumptionRows, komoditiMap, 'Standard Jenis Komoditi', 'Standard Kategori Komoditi'),
+    [rawConsumptionRows, komoditiMap]
+  );
+  const marketFlowRows = useMemo(
+    () => standardizeRowsKomoditiFields(rawMarketFlowRows, komoditiMap, 'Jenis_Komoditi', 'Kategori_Komoditi'),
+    [rawMarketFlowRows, komoditiMap]
+  );
+  const importRows = useMemo(
+    () => standardizeRowsKomoditiFields(importRowsCountryStd, komoditiMap, 'Standard Jenis Komoditi', 'Kumpulan Barangan'),
+    [importRowsCountryStd, komoditiMap]
+  );
+  const exportRows = useMemo(
+    () => standardizeRowsKomoditiFields(exportRowsCountryStd, komoditiMap, 'Standard Jenis Komoditi', 'Kumpulan Barangan'),
+    [exportRowsCountryStd, komoditiMap]
+  );
+  const standardizedTradeLogisticRows = useMemo(
+    () => standardizeRowsKomoditiFields(standardizedTradeLogisticRowsCountryStd, komoditiMap, 'JENIS_KOMODITI'),
+    [standardizedTradeLogisticRowsCountryStd, komoditiMap]
+  );
+  const standardizedGlobalTradeFlowRows = useMemo(
+    () => standardizeRowsKomoditiFields(globalTradeFlowRowsCountryStd, komoditiMap, 'Jenis_Komoditi'),
+    [globalTradeFlowRowsCountryStd, komoditiMap]
+  );
+
   const handleGlobalReset = () => {
     setSelectedTahun("All");
     setSelectedBulan("All");
@@ -32,130 +146,242 @@ export default function Permintaan({ isDarkMode = false }) {
     setPasaranToggle('Negeri');
   };
 
-  const isCili = selectedKomoditi === 'Cili';
-  const isTembikai = selectedKomoditi === 'Tembikai';
-  const isKubis = selectedKomoditi === 'Kubis';
+  // Shared filter translations for the real-data aggregations below.
+  const commodityKeyword = selectedKomoditi !== 'Semua Komoditi' ? selectedKomoditi : undefined;
+  const negeriLabel = selectedNegeri !== 'All' ? selectedNegeri : undefined;
+  const daerahLabel = selectedDaerah !== 'All' ? selectedDaerah : undefined;
+  const monthCode = selectedBulan !== 'All' ? BULAN_ABBR_TO_CODE[selectedBulan] : undefined;
+  const effectiveYear = selectedTahun !== 'All' ? selectedTahun : undefined;
 
-  // --- MOCK DATA ENGINE (PERMINTAAN) ---
+  const productionReady = !dashboardLoading && !dashboardError && productionRows.length > 0;
+  const consumptionMonthRows = useMemo(
+    () => standardizeRowsKomoditiFields(rawConsumptionMonthRows, komoditiMap, 'Standard Jenis Komoditi', 'Standard Kategori Komoditi'),
+    [rawConsumptionMonthRows, komoditiMap]
+  );
+
+  const consumptionReady = !dashboardLoading && !dashboardError && consumptionRows.length > 0;
+  const tradeReady = !tradeLoading && !tradeError && exportRows.length > 0;
+  const logisticsReady = !dashboardLoading && !dashboardError && tradeLogisticRows.length > 0 && refPortRows.length > 0;
+  const marketFlowReady = !dashboardLoading && !dashboardError && marketFlowRows.length > 0;
+  const profilingReady = !profilingLoading && !profilingError && profilingRows.length > 0;
+  const globalTradeFlowReady = !globalTradeFlowLoading && !globalTradeFlowError && globalTradeFlowRows.length > 0;
+
+  // Real filter dropdown options, built from PRODUCTION (same taxonomy is
+  // shared across PRODUCTION/CONSUMPTION_BY_STATE/EXPORT).
+  const realNegeriDaerahTree = useMemo(() => {
+    if (!productionReady) return null;
+    return computeNegeriDaerahTree(productionRows, consumptionRows);
+  }, [productionReady, productionRows, consumptionRows]);
+
+  const realCommodityList = useMemo(() => {
+    if (!productionReady) return null;
+    return computeAllCommodities(productionRows);
+  }, [productionReady, productionRows]);
+
+  const MOCK_NEGERI_LIST = ['Johor', 'Pahang', 'Kelantan', 'Perak', 'Selangor', 'Sabah'];
+  const MOCK_DAERAH_LIST = ['Batu Pahat', 'Kluang', 'Tangkak', 'Cameron Highlands', 'Sabak Bernam'];
+  const MOCK_KOMODITI_LIST = ['Cili', 'Kubis', 'Tembikai'];
+
+  const negeriOptions = realNegeriDaerahTree ? realNegeriDaerahTree.negeriList : MOCK_NEGERI_LIST;
+  const daerahOptions = realNegeriDaerahTree
+    ? (selectedNegeri !== 'All' ? (realNegeriDaerahTree.daerahByNegeri[selectedNegeri] || []) : Object.values(realNegeriDaerahTree.daerahByNegeri).flat().sort())
+    : MOCK_DAERAH_LIST;
+  const komoditiOptions = realCommodityList || MOCK_KOMODITI_LIST;
+
+  // --- KPI: EXPORT (tab 0/2) ---
+  const realEksportMT = useMemo(() => {
+    if (!tradeReady) return null;
+    return computeQuantityTotal(exportRows, { year: effectiveYear, monthCode, commodityKeyword });
+  }, [tradeReady, exportRows, effectiveYear, monthCode, commodityKeyword]);
+
+  const realNilaiEksportRM = useMemo(() => {
+    if (!tradeReady) return null;
+    return computeValueTotal(exportRows, { year: effectiveYear, monthCode, commodityKeyword });
+  }, [tradeReady, exportRows, effectiveYear, monthCode, commodityKeyword]);
+
+  const realTop5Eksport = useMemo(() => {
+    if (!tradeReady) return null;
+    return computeTop5CountriesDetailed(exportRows, { year: effectiveYear, monthCode, commodityKeyword });
+  }, [tradeReady, exportRows, effectiveYear, monthCode, commodityKeyword]);
+
+  // --- KPI: PENGGUNAAN (tab 0/1) ---
+  const realPenggunaanTotalKg = useMemo(() => {
+    if (!consumptionReady) return null;
+    return computeConsumptionTotalKg(consumptionRows, { year: effectiveYear, commodityKeyword, negeriLabel });
+  }, [consumptionReady, consumptionRows, effectiveYear, commodityKeyword, negeriLabel]);
+
+  // --- Map data (PRODUCTION) — computed here (ahead of realTop5Penggunaan
+  // below) so the table can use the same real per-district production
+  // shares the map uses to split a selected state's consumption total.
+  const realProductionByStateDistrict = useMemo(() => {
+    if (!productionReady) return null;
+    return computeProductionByStateDistrict(productionRows, { year: effectiveYear, monthCode, commodityKeyword });
+  }, [productionReady, productionRows, effectiveYear, monthCode, commodityKeyword]);
+
+  const realTop5Penggunaan = useMemo(() => {
+    if (!consumptionReady) return null;
+    // Pass the same real production-by-district data the map uses to
+    // spread a selected state's total across its districts, so the "5
+    // Lokasi Utama Penggunaan" table and the map agree on each district's
+    // figure instead of using two different estimated splits.
+    return computeTop5PenggunaanDetailed(consumptionRows, { year: effectiveYear, commodityKeyword, negeriLabel }, negeriLabel, STATE_DISTRICTS_MAP, realProductionByStateDistrict);
+  }, [consumptionReady, consumptionRows, effectiveYear, commodityKeyword, negeriLabel, realProductionByStateDistrict]);
+
+  const realSegmen = useMemo(() => {
+    if (!consumptionReady) return null;
+    return computeConsumptionSegmentBreakdown(consumptionRows, { year: effectiveYear, commodityKeyword, negeriLabel });
+  }, [consumptionReady, consumptionRows, effectiveYear, commodityKeyword, negeriLabel]);
+
+  // --- Map data (CONSUMPTION_BY_STATE) ---
+  const realConsumptionByState = useMemo(() => {
+    if (!consumptionReady) return null;
+    return computeConsumptionByState(consumptionRows, { year: effectiveYear, commodityKeyword });
+  }, [consumptionReady, consumptionRows, effectiveYear, commodityKeyword]);
+
+  // Per-district Isi Rumah consumption from CONSUMPTION_BY_STATE's district
+  // column — real figures that drive Peta Penggunaan - Isi Rumah.
+  const realConsumptionByStateDistrict = useMemo(() => {
+    if (!consumptionReady) return null;
+    return computeConsumptionByStateDistrict(consumptionRows, { year: effectiveYear, commodityKeyword });
+  }, [consumptionReady, consumptionRows, effectiveYear, commodityKeyword]);
+
+  // --- Transport split (TRADE_LOGISTIC + REF_PORT, export side) ---
+  const realTransportSplit = useMemo(() => {
+    if (!logisticsReady) return null;
+    const { exportRoutes } = computeRouteSplits(standardizedTradeLogisticRows, refPortRows, { year: effectiveYear, monthCode, commodityKeyword });
+    if (!exportRoutes) return null;
+    const byName = Object.fromEntries(exportRoutes.map((r) => [r.name.toLowerCase(), r.value]));
+    return { darat: byName.darat || 0, laut: byName.laut || 0, udara: byName.udara || 0 };
+  }, [logisticsReady, standardizedTradeLogisticRows, refPortRows, effectiveYear, monthCode, commodityKeyword]);
+
+  // --- Yearly/monthly trend (CONSUMPTION_BY_STATE + EXPORT) ---
+  const realYearlyTrend = useMemo(() => {
+    if (!consumptionReady && !tradeReady) return null;
+    return computeYearlyTrendDemand(consumptionRows, exportRows, ['2024', '2025'], { commodityKeyword, categoryKeyword: undefined, negeriLabel, daerahLabel }, consumptionMonthRows);
+  }, [consumptionReady, tradeReady, consumptionRows, consumptionMonthRows, exportRows, commodityKeyword, negeriLabel, daerahLabel]);
+
+  const realMonthlyTrend = useMemo(() => {
+    if (!consumptionReady && !tradeReady) return null;
+    return computeMonthlyTrendDemand(consumptionRows, exportRows, effectiveYear || '2025', { commodityKeyword, categoryKeyword: undefined, negeriLabel, daerahLabel }, consumptionMonthRows);
+  }, [consumptionReady, tradeReady, consumptionRows, consumptionMonthRows, exportRows, effectiveYear, commodityKeyword, negeriLabel, daerahLabel]);
+
+  // --- Real per-country stats + supply chain for the MalaysiaFlowMap toggle ---
+  const realCountryStats = useMemo(() => {
+    if (!tradeReady) return null;
+    return computeCountryTradeStats(importRows, exportRows, { year: effectiveYear, monthCode, commodityKeyword }, FLOW_MAP_COUNTRY_KEYWORDS);
+  }, [tradeReady, importRows, exportRows, effectiveYear, monthCode, commodityKeyword]);
+
+  // Top-10 real export partners for Malaysia (this page has no map
+  // country-selection, so the anchor is always Malaysia).
+  const realTopExportPartners = useMemo(() => {
+    if (!globalTradeFlowReady || !commodityKeyword) return null;
+    return computeTopPartners(standardizedGlobalTradeFlowRows, { year: effectiveYear, commodity: commodityKeyword, reporter: 'Malaysia', tradeType: 'Export', limit: 10 });
+  }, [globalTradeFlowReady, standardizedGlobalTradeFlowRows, effectiveYear, commodityKeyword]);
+
+  // --- Market flow (MARKET_FLOW + PROFILING_PENGELUAR for real producer-state join) ---
+  const formToNegeriMap = useMemo(() => {
+    if (!profilingReady) return null;
+    return computeFormToNegeriMap(profilingRows);
+  }, [profilingReady, profilingRows]);
+
+  const formToDaerahMap = useMemo(() => {
+    if (!profilingReady) return null;
+    return computeFormToDaerahMap(profilingRows);
+  }, [profilingReady, profilingRows]);
+
+  const marketFlowFilters = { year: effectiveYear, commodityKeyword, categoryKeyword: undefined, producerNegeriLabel: negeriLabel, formToNegeriMap, producerDaerahLabel: daerahLabel, formToDaerahMap };
+
+  const realSaluranPasaran = useMemo(() => {
+    if (!marketFlowReady) return null;
+    return computeSaluranPasaranFunnel(marketFlowRows, marketFlowFilters);
+  }, [marketFlowReady, marketFlowRows, effectiveYear, commodityKeyword, negeriLabel, formToNegeriMap, daerahLabel, formToDaerahMap]);
+
+  const realPasaranGlobal = useMemo(() => {
+    if (!marketFlowReady) return null;
+    return computeTopMarketCountries(marketFlowRows, marketFlowFilters, 5);
+  }, [marketFlowReady, marketFlowRows, effectiveYear, commodityKeyword, negeriLabel, formToNegeriMap, daerahLabel, formToDaerahMap]);
+
+  const realPasaranNegeriList = useMemo(() => {
+    if (!marketFlowReady) return null;
+    return computeTopMarketStates(marketFlowRows, marketFlowFilters, 5);
+  }, [marketFlowReady, marketFlowRows, effectiveYear, commodityKeyword, negeriLabel, formToNegeriMap, daerahLabel, formToDaerahMap]);
+
+  const realPasaranDaerahList = useMemo(() => {
+    if (!marketFlowReady) return null;
+    return computeTopMarketDistricts(marketFlowRows, marketFlowFilters, 5);
+  }, [marketFlowReady, marketFlowRows, effectiveYear, commodityKeyword, negeriLabel, formToNegeriMap, daerahLabel, formToDaerahMap]);
+
+  // --- Tab 2: Pemantauan Eksport (TRADE_LOGISTIC + REF_PORT, export side) ---
+  const realEksportPelabuhan = useMemo(() => {
+    if (!logisticsReady) return null;
+    return computeTopPorts(standardizedTradeLogisticRows, refPortRows, { year: effectiveYear, monthCode, commodityKeyword }, 10, 'EXPORT');
+  }, [logisticsReady, standardizedTradeLogisticRows, refPortRows, effectiveYear, monthCode, commodityKeyword]);
+
+  const realEksportTransactionDetails = useMemo(() => {
+    if (!logisticsReady) return null;
+    return computeImportTransactionDetails(standardizedTradeLogisticRows, refPortRows, { year: effectiveYear, monthCode, commodityKeyword }, 20, 'EXPORT');
+  }, [logisticsReady, standardizedTradeLogisticRows, refPortRows, effectiveYear, monthCode, commodityKeyword]);
+
+  // --- MERGE: real sheet-derived values are used wherever available.
+  // Nothing here has a fabricated fallback number any more — a KPI whose
+  // sheet isn't ready is null (rendered as "–" in the KPI cards below);
+  // everything else falls back to the same real-empty shape (0 / [] /
+  // zeroed object) the code already uses for a genuine real zero-result.
+  // nilaiPenggunaanRM has no real source at all (CONSUMPTION_BY_STATE has
+  // no RM column) so it's always null/"–" until a source exists. ---
   const data = useMemo(() => {
-    let baseEksportRM = 11234567890.00;
-    let baseEksportMT = 5123456.78;
-    let basePenggunaanMT = 4890123.45;
-    let basePenggunaanRM = 12560888200.00; 
-
-    if (isTembikai) {
-      baseEksportRM = 80000000.00; baseEksportMT = 45000; basePenggunaanMT = 150000; basePenggunaanRM = 170000000;
-    } else if (isCili) {
-      baseEksportRM = 45000000.00; baseEksportMT = 15000; basePenggunaanMT = 45000; basePenggunaanRM = 210000000;
-    } else if (isKubis) {
-      baseEksportRM = 60000000.00; baseEksportMT = 25000; basePenggunaanMT = 95000; basePenggunaanRM = 120000000;
-    }
-
-    let filterMult = 1.0;
-    if (selectedTahun === "2024") filterMult *= 0.85;
-    if (selectedTahun === "2025") filterMult *= 1.15;
-    if (selectedBulan !== "All") filterMult *= 0.10; 
-    if (selectedNegeri !== "All") filterMult *= 0.25; 
-    if (selectedDaerah !== "All") filterMult *= 0.15; 
-
-    const nilaiEksportRM = baseEksportRM * filterMult;
-    const eksportMT = baseEksportMT * filterMult;
-    const penggunaanMT = basePenggunaanMT * filterMult;
-    const nilaiPenggunaanRM = basePenggunaanRM * filterMult;
-
-    const jumlahPasaranMT = eksportMT + penggunaanMT;
-    const jumlahNilaiPasaranRM = nilaiEksportRM + nilaiPenggunaanRM;
-
-    const months = ['JANUARI', 'FEBRUARI', 'MAC', 'APRIL', 'MEI', 'JUN', 'JULAI', 'OGOS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DISEMBER'];
-    const pFactors = [0.85, 0.90, 1.10, 1.05, 1.15, 0.95, 1.00, 0.90, 1.05, 1.10, 0.95, 1.00];
-    const eFactors = [0.95, 1.00, 0.85, 0.90, 1.10, 1.05, 0.95, 1.00, 1.15, 0.90, 1.05, 1.10];
-    
-    const monthlyData = months.map((m, i) => ({
-        month: m,
-        penggunaan: (penggunaanMT / 12) * pFactors[i],
-        eksport: (eksportMT / 12) * eFactors[i]
-    }));
-
-    const activeNegeriName = selectedNegeri !== 'All' ? selectedNegeri.toUpperCase() : 'NEGERI';
-    const mockPenggunaanNegeri = [
-      { lokasi: "SELANGOR", qty: 448330.37 * filterMult, pct: 15.97 },
-      { lokasi: "W.P. KUALA LUMPUR", qty: 344200.26 * filterMult, pct: 12.99 },
-      { lokasi: "JOHOR", qty: 338025.87 * filterMult, pct: 11.81 },
-      { lokasi: "PULAU PINANG", qty: 251022.95 * filterMult, pct: 8.32 },
-      { lokasi: "PERAK", qty: 141662.47 * filterMult, pct: 5.05 }
-    ];
-    const mockPenggunaanDaerah = [
-      { lokasi: `${activeNegeriName} - DAERAH UTAMA`, qty: 150000 * filterMult, pct: 45.0 },
-      { lokasi: `${activeNegeriName} - DAERAH KEDUA`, qty: 80000 * filterMult, pct: 25.0 },
-      { lokasi: `${activeNegeriName} - DAERAH KETIGA`, qty: 50000 * filterMult, pct: 15.0 },
-      { lokasi: `${activeNegeriName} - DAERAH KEEMPAT`, qty: 30000 * filterMult, pct: 10.0 },
-      { lokasi: `${activeNegeriName} - DAERAH KELIMA`, qty: 15000 * filterMult, pct: 5.0 }
-    ];
-    const mockPenggunaanSatuDaerah = [ { lokasi: `${activeNegeriName} - ${selectedDaerah.toUpperCase()}`, qty: 150000 * filterMult, pct: 100.0 } ];
-
-    const top5Penggunaan = selectedDaerah !== "All" ? mockPenggunaanSatuDaerah : selectedNegeri !== "All" ? mockPenggunaanDaerah : mockPenggunaanNegeri;
+    const eksportMT = tradeReady ? Math.round(realEksportMT ?? 0) : null;
+    const nilaiEksportRM = tradeReady ? (realNilaiEksportRM ?? 0) : null;
+    const penggunaanMT = consumptionReady ? (realPenggunaanTotalKg ?? 0) / 1000 : null;
+    const nilaiPenggunaanRM = null; // CONSUMPTION_BY_STATE has no RM column — no real source yet
+    const jumlahPasaranMT = (consumptionReady || tradeReady) ? Math.round((eksportMT ?? 0) + (penggunaanMT ?? 0)) : null;
+    // "Jumlah Nilai" is meant to be eksport + penggunaan RM combined; since
+    // penggunaan RM has no real source at all, a partial sum would be
+    // mislabeled as a total, so this stays "–" rather than showing half a
+    // number under a "Jumlah" (total) label.
+    const jumlahNilaiPasaranRM = null;
 
     return {
-      filterMultiplier: filterMult, 
       kpi: { nilaiEksportRM, nilaiPenggunaanRM, jumlahNilaiPasaranRM, eksportMT, penggunaanMT, jumlahPasaranMT },
-      transport: { darat: 24.50, laut: 70.20, udara: 5.30 },
-      segmen: { isirumah: 65.4, hospitaliti: 22.1, kilang: 12.5 },
-      top5Eksport: [
-        { negara: "SINGAPURA", qty: 950000.11 * filterMult, qtyPct: 28.55, nilai: 4100164920.00 * filterMult },
-        { negara: "CHINA", qty: 450909.03 * filterMult, qtyPct: 15.74, nilai: 1035406930.00 * filterMult },
-        { negara: "JEPUN", qty: 380615.19 * filterMult, qtyPct: 11.91, nilai: 898069908.00 * filterMult },
-        { negara: "BRUNEI", qty: 159309.98 * filterMult, qtyPct: 5.73, nilai: 538039200.00 * filterMult },
-        { negara: "AUSTRALIA", qty: 111098.62 * filterMult, qtyPct: 3.44, nilai: 359478031.00 * filterMult }
-      ],
-      top5Penggunaan, 
-      pasaranGlobal: [
-        { lokasi: "SINGAPURA", qty: 45000 * filterMult, pct: 40.5 }, { lokasi: "CHINA", qty: 30000 * filterMult, pct: 27.0 },
-        { lokasi: "JEPUN", qty: 15000 * filterMult, pct: 13.5 }, { lokasi: "THAILAND", qty: 12000 * filterMult, pct: 10.8 }, { lokasi: "BRUNEI", qty: 9000 * filterMult, pct: 8.2 }
-      ],
-      pasaranNegeriList: [
-        { lokasi: "SELANGOR", qty: 85000 * filterMult, pct: 35.0 }, { lokasi: "W.P. KUALA LUMPUR", qty: 65000 * filterMult, pct: 26.8 },
-        { lokasi: "JOHOR", qty: 45000 * filterMult, pct: 18.5 }, { lokasi: "PULAU PINANG", qty: 25000 * filterMult, pct: 10.3 }, { lokasi: "PERAK", qty: 22000 * filterMult, pct: 9.4 }
-      ],
-      pasaranDaerahList: [
-        { lokasi: "SELANGOR - PETALING", qty: 40000 * filterMult, pct: 25.5 }, { lokasi: "W.P. KUALA LUMPUR", qty: 35000 * filterMult, pct: 22.3 },
-        { lokasi: "JOHOR - JOHOR BAHRU", qty: 30000 * filterMult, pct: 19.1 }, { lokasi: "SELANGOR - KLANG", qty: 28000 * filterMult, pct: 17.8 }, { lokasi: "SELANGOR - HULU LANGAT", qty: 24000 * filterMult, pct: 15.3 }
-      ],
-      saluranPasaran: [
-        { name: 'Luar Negeri', value: 54.23 }, { name: 'Dalam Daerah', value: 29.09 }, { name: 'Luar Daerah', value: 10.86 },
-        { name: 'Luar Negara', value: 3.13 }, { name: 'Dalam Negeri', value: 2.69 }
-      ],
-      yearlyChart: { 
-        y2024: { 
-          penggunaan: 4595402.94 * filterMult * (selectedTahun === "All" || selectedTahun === "2024" ? 1 : 0), 
-          eksport: 4730994.27 * filterMult * (selectedTahun === "All" || selectedTahun === "2024" ? 1 : 0) 
-        }, 
-        y2025: { 
-          penggunaan: 4890123.45 * filterMult * (selectedTahun === "All" || selectedTahun === "2025" ? 1 : 0), 
-          eksport: 5123456.78 * filterMult * (selectedTahun === "All" || selectedTahun === "2025" ? 1 : 0) 
-        } 
+      transport: logisticsReady ? (realTransportSplit ?? { darat: 0, laut: 0, udara: 0 }) : { darat: 0, laut: 0, udara: 0 },
+      segmen: consumptionReady ? (realSegmen ?? { isirumah: 0, hospitaliti: 0, kilang: 0, isirumahMT: 0, hospitalitiMT: 0, kilangMT: 0 }) : { isirumah: 0, hospitaliti: 0, kilang: 0, isirumahMT: 0, hospitalitiMT: 0, kilangMT: 0 },
+      top5Eksport: tradeReady ? (realTop5Eksport ?? []) : [],
+      top5Penggunaan: consumptionReady ? (realTop5Penggunaan ?? []) : [],
+      yearlyChart: (consumptionReady || tradeReady) ? (realYearlyTrend ?? { y2024: { penggunaan: 0, eksport: 0 }, y2025: { penggunaan: 0, eksport: 0 } }) : { y2024: { penggunaan: 0, eksport: 0 }, y2025: { penggunaan: 0, eksport: 0 } },
+      monthlyChart: (consumptionReady || tradeReady) ? (realMonthlyTrend ?? []) : [],
+      saluranPasaran: marketFlowReady ? (realSaluranPasaran ?? []) : [],
+      pasaranGlobal: marketFlowReady ? (realPasaranGlobal ?? []) : [],
+      pasaranNegeriList: marketFlowReady ? (realPasaranNegeriList ?? []) : [],
+      pasaranDaerahList: marketFlowReady ? (realPasaranDaerahList ?? []) : [],
+      eksportPelabuhan: logisticsReady ? (realEksportPelabuhan ?? []) : [],
+      eksportTableDetails: logisticsReady ? (realEksportTransactionDetails ? realEksportTransactionDetails.rows : []) : [],
+      eksportTableTotals: logisticsReady
+        ? { qty: realEksportTransactionDetails?.totalQty ?? 0, rm: realEksportTransactionDetails?.totalRM ?? 0 }
+        : { qty: 0, rm: 0 },
+      liveFlags: {
+        eksport: tradeReady,
+        penggunaan: consumptionReady,
+        transport: logisticsReady,
+        top5Eksport: tradeReady,
+        top5Penggunaan: consumptionReady,
+        trend: consumptionReady || tradeReady,
+        pasaran: marketFlowReady,
+        eksportDetail: logisticsReady,
       },
-      monthlyChart: monthlyData,
-      eksportPelabuhan: [
-        { pelabuhan: 'KEDAH CHECKPOINT', pct: 0.55 }, { pelabuhan: 'JOHOR CHECKPOINT', pct: 0.62 },
-        { pelabuhan: 'TANJUNG PELEPAS PORT', pct: 0.66 }, { pelabuhan: 'PERLIS LAND BORDER', pct: 1.67 },
-        { pelabuhan: 'RANTAU PANJANG', pct: 2.32 }, { pelabuhan: 'PASIR GUDANG', pct: 2.65 },
-        { pelabuhan: 'PENANG PORT', pct: 3.70 }, { pelabuhan: 'BUKIT KAYU HITAM', pct: 9.08 },
-        { pelabuhan: 'BATU PAHAT', pct: 21.89 }, { pelabuhan: 'PORT KLANG', pct: 55.55 }
-      ],
-      eksportTableDetails: [
-        { komoditi: 'KELAPA', negara: 'SINGAPURA', qty: 555658.33 * filterMult, rm: 663313283.80 * filterMult, negeri: 'JOHOR', pelabuhan: 'BATU PAHAT', jenis: 'LAUT' },
-        { komoditi: 'BAWANG', negara: 'CHINA', qty: 360176.36 * filterMult, rm: 586472174.69 * filterMult, negeri: 'SELANGOR', pelabuhan: 'PORT KLANG', jenis: 'LAUT' },
-        { komoditi: 'KUBIS', negara: 'JEPUN', qty: 233073.20 * filterMult, rm: 319251703.45 * filterMult, negeri: 'SELANGOR', pelabuhan: 'PORT KLANG', jenis: 'LAUT' },
-        { komoditi: 'CILI', negara: 'THAILAND', qty: 89648.05 * filterMult, rm: 279427251.40 * filterMult, negeri: 'KEDAH', pelabuhan: 'BUKIT KAYU HITAM', jenis: 'DARAT' }
-      ]
     };
-  }, [selectedTahun, selectedBulan, selectedKomoditi, isCili, isTembikai, selectedNegeri, selectedDaerah]); 
+  }, [
+    tradeReady, consumptionReady, logisticsReady, marketFlowReady,
+    realEksportMT, realNilaiEksportRM, realPenggunaanTotalKg, realTransportSplit, realSegmen,
+    realTop5Eksport, realTop5Penggunaan, realYearlyTrend, realMonthlyTrend,
+    realSaluranPasaran, realPasaranGlobal, realPasaranNegeriList, realPasaranDaerahList,
+    realEksportPelabuhan, realEksportTransactionDetails,
+  ]);
 
   // --- VARIABLES RE-ADDED FOR TAB 1 ---
   const top5Pasaran = pasaranToggle === 'Global' ? data.pasaranGlobal : pasaranToggle === 'Negeri' ? data.pasaranNegeriList : data.pasaranDaerahList;
 
   const funnelOption = {
-    backgroundColor: 'transparent', tooltip: { trigger: 'item', formatter: '{b} : {c}%' },
+    backgroundColor: 'transparent', tooltip: { trigger: 'item', formatter: (p) => `${p.name} : ${formatFixed(p.value, 2)}%` },
     series: [
       { name: 'Saluran Pasaran', type: 'funnel', left: '35%', width: '50%', top: '5%', bottom: '5%', minSize: '10%', maxSize: '100%', sort: 'descending', gap: 2, label: { show: true, position: 'inside', formatter: '{c}%', color: '#fff', fontWeight: 'bold', fontSize: 10 }, labelLine: { show: false }, itemStyle: { color: '#8b5cf6', borderColor: isDarkMode ? '#1e293b' : '#fff', borderWidth: 1 }, data: data.saluranPasaran },
       { type: 'funnel', left: '35%', width: '50%', top: '5%', bottom: '5%', minSize: '10%', maxSize: '100%', sort: 'descending', gap: 2, zlevel: 2, itemStyle: { color: 'transparent', borderColor: 'transparent' }, label: { show: true, position: 'left', formatter: '{b}', color: isDarkMode ? '#cbd5e1' : '#64748b', fontSize: 10, fontWeight: 'bold' }, labelLine: { show: false }, data: data.saluranPasaran }
@@ -168,17 +394,21 @@ export default function Permintaan({ isDarkMode = false }) {
   const gaugeChartOption = {
     backgroundColor: 'transparent',
     series: [{
-        type: 'gauge', startAngle: 180, endAngle: 0, center: ['50%', '85%'], radius: '140%', min: 0, max: 100,
+        type: 'gauge', startAngle: 180, endAngle: 0, center: ['50%', '72%'], radius: '105%', min: 0, max: 100,
         axisLine: { lineStyle: { width: 14, color: [[ssrPercentage / 100, '#3b82f6'], [1, '#f97316']] } },
         pointer: { show: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
-        detail: { formatter: (v) => `{a|${v.toFixed(1)}%}\n{b|Syer Penggunaan}`, rich: { a: { fontSize: 18, fontWeight: '900', color: isDarkMode ? '#f8fafc' : '#1e293b' }, b: { fontSize: 9, fontWeight: 'bold', color: isDarkMode ? '#94a3b8' : '#64748b', padding: [5,0,0,0] } }, offsetCenter: [0, '-10%'] },
+        detail: { formatter: (v) => `{a|${v.toFixed(1)}%}\n{b|Syer Penggunaan}`, rich: { a: { fontSize: 18, fontWeight: '900', color: isDarkMode ? '#f8fafc' : '#1e293b' }, b: { fontSize: 9, fontWeight: 'bold', color: isDarkMode ? '#94a3b8' : '#64748b', padding: [5,0,0,0] } }, offsetCenter: [0, '-18%'] },
         data: [{ value: ssrPercentage }]
     }]
   };
 
+  const mtAxis = computeMtAxis(chartViewMode === 'yearly'
+    ? [data.yearlyChart.y2024.penggunaan, data.yearlyChart.y2025.penggunaan, data.yearlyChart.y2024.eksport, data.yearlyChart.y2025.eksport]
+    : data.monthlyChart.flatMap((m) => [m.penggunaan, m.eksport]));
+
   const barChartOption = {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (v) => formatFixed(v, 2) },
     legend: { data: ['JUMLAH PENGGUNAAN (MT)', 'JUMLAH EKSPORT (MT)'], icon: 'circle', textStyle: { color: isDarkMode ? '#cbd5e1' : '#64748b', fontSize: 10, fontWeight: '600' }, top: 0 },
     grid: { left: '3%', right: '4%', bottom: '5%', top: '25%', containLabel: true },
     xAxis: { 
@@ -188,19 +418,19 @@ export default function Permintaan({ isDarkMode = false }) {
         axisTick: { show: false } 
     },
     yAxis: { 
-      type: 'value', 
-      axisLabel: { color: isDarkMode ? '#94a3b8' : '#94a3b8', formatter: (val) => `${(val / 1000000).toFixed(1)}M` }, 
+      type: 'value', min: 0, max: mtAxis.max, interval: mtAxis.interval,
+      axisLabel: { color: isDarkMode ? '#94a3b8' : '#94a3b8', formatter: mtAxis.axisLabel }, 
       splitLine: { lineStyle: { color: isDarkMode ? '#1e293b' : '#f1f5f9', type: 'dashed' } } 
     },
     series: [
-      { name: 'JUMLAH PENGGUNAAN (MT)', type: 'bar', barWidth: chartViewMode === 'yearly' ? '20%' : '35%', data: chartViewMode === 'yearly' ? [data.yearlyChart.y2024.penggunaan, data.yearlyChart.y2025.penggunaan] : data.monthlyChart.map(m => m.penggunaan), itemStyle: { color: '#3b82f6', borderRadius: [6, 6, 0, 0] }, label: { show: chartViewMode === 'yearly', position: 'top', formatter: (p) => p.value > 0 ? (p.value/1000000).toFixed(2) + 'M' : '', fontSize: 10, color: '#3b82f6', fontWeight: 'bold' } },
-      { name: 'JUMLAH EKSPORT (MT)', type: 'bar', barWidth: chartViewMode === 'yearly' ? '20%' : '35%', data: chartViewMode === 'yearly' ? [data.yearlyChart.y2024.eksport, data.yearlyChart.y2025.eksport] : data.monthlyChart.map(m => m.eksport), itemStyle: { color: '#f97316', borderRadius: [6, 6, 0, 0] }, label: { show: chartViewMode === 'yearly', position: 'top', formatter: (p) => p.value > 0 ? (p.value/1000000).toFixed(2) + 'M' : '', fontSize: 10, color: '#f97316', fontWeight: 'bold' } }
+      { name: 'JUMLAH PENGGUNAAN (MT)', type: 'bar', barWidth: chartViewMode === 'yearly' ? '20%' : '35%', data: chartViewMode === 'yearly' ? [data.yearlyChart.y2024.penggunaan, data.yearlyChart.y2025.penggunaan] : data.monthlyChart.map(m => m.penggunaan), itemStyle: { color: '#3b82f6', borderRadius: [6, 6, 0, 0] }, label: { show: chartViewMode === 'yearly', position: 'top', formatter: (p) => mtAxis.valueLabel(p.value), fontSize: 10, color: '#3b82f6', fontWeight: 'bold' } },
+      { name: 'JUMLAH EKSPORT (MT)', type: 'bar', barWidth: chartViewMode === 'yearly' ? '20%' : '35%', data: chartViewMode === 'yearly' ? [data.yearlyChart.y2024.eksport, data.yearlyChart.y2025.eksport] : data.monthlyChart.map(m => m.eksport), itemStyle: { color: '#f97316', borderRadius: [6, 6, 0, 0] }, label: { show: chartViewMode === 'yearly', position: 'top', formatter: (p) => mtAxis.valueLabel(p.value), fontSize: 10, color: '#f97316', fontWeight: 'bold' } }
     ]
   };
 
   const portBarOption = {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (v) => formatFixed(v, 2) + '%' },
     grid: { left: '3%', right: '15%', bottom: '3%', top: '3%', containLabel: true },
     xAxis: { type: 'value', show: false },
     yAxis: { 
@@ -264,6 +494,9 @@ export default function Permintaan({ isDarkMode = false }) {
           <div>
             <h2 className="text-xl md:text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tight">{activeTab === 0 ? "EKSPORT & PENGGUNAAN" : activeTab === 1 ? "PENGGUNAAN" : "PEMANTAUAN EKSPORT"}</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Prestasi Keseluruhan Rantaian Permintaan</p>
+            {(dashboardLoading || tradeLoading) && <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 animate-pulse mt-0.5">Memuatkan data...</p>}
+            {(dashboardError || tradeError) && <p className="text-[9px] font-bold uppercase tracking-wider text-red-500 mt-0.5" title={dashboardError || tradeError}>Sebahagian data sheet tidak disambung</p>}
+            {!dashboardLoading && !tradeLoading && !dashboardError && !tradeError && (data.liveFlags.eksport || data.liveFlags.penggunaan) && <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-500 mt-0.5">● Data Langsung</p>}
           </div>
         </div>
         <div className="flex gap-2 w-full md:w-auto bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
@@ -279,17 +512,21 @@ export default function Permintaan({ isDarkMode = false }) {
         <div className="flex flex-col md:flex-row gap-2 items-end">
           <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3 w-full bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
             {[
-              { label: 'TAHUN', val: selectedTahun, set: setSelectedTahun, options: ['All', '2024', '2025'] },
-              { label: 'BULAN', val: selectedBulan, set: setSelectedBulan, options: ['All', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] },
-              { label: 'NEGERI', val: selectedNegeri, set: setSelectedNegeri, options: ['All', 'Johor', 'Pahang', 'Kelantan', 'Perak', 'Selangor', 'Sabah'] },
-              { label: 'DAERAH', val: selectedDaerah, set: setSelectedDaerah, options: ['All', 'Batu Pahat', 'Kluang', 'Tangkak', 'Cameron Highlands', 'Sabak Bernam'] },
-              { label: 'KOMODITI', val: selectedKomoditi, set: setSelectedKomoditi, options: ['Semua Komoditi', 'Cili', 'Kubis', 'Tembikai'] }
+              { label: 'TAHUN', val: selectedTahun, set: setSelectedTahun, options: ['All', '2024', '2025'], searchable: false },
+              { label: 'BULAN', val: selectedBulan, set: setSelectedBulan, options: BULAN_OPTIONS, searchable: false },
+              { label: 'NEGERI', val: selectedNegeri, set: (v) => { setSelectedNegeri(v); setSelectedDaerah('All'); }, options: [{ value: 'All', label: 'ALL' }, ...negeriOptions.map((n) => ({ value: n, label: n.toUpperCase() }))] },
+              { label: 'DAERAH', val: selectedDaerah, set: setSelectedDaerah, options: [{ value: 'All', label: 'ALL' }, ...daerahOptions.map((d) => ({ value: d, label: d.toUpperCase() }))] },
+              { label: 'KOMODITI', val: selectedKomoditi, set: setSelectedKomoditi, options: [{ value: 'Semua Komoditi', label: 'SEMUA KOMODITI' }, ...komoditiOptions.map((k) => ({ value: k, label: k.toUpperCase() }))] }
             ].map((f, i) => (
               <div key={i} className="flex flex-col gap-1">
                 <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-1">{f.label}</label>
-                <select value={f.val} onChange={(e) => f.set(e.target.value)} className="text-xs font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-700 dark:text-slate-200 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
-                  {f.options ? f.options.map(o => <option key={o} value={o}>{o}</option>) : <option value="All">All</option>}
-                </select>
+                <SearchableSelect
+                  value={f.val}
+                  onChange={f.set}
+                  options={f.options || ['All']}
+                  searchable={f.searchable !== false}
+                  triggerClassName="text-xs font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-slate-700 dark:text-slate-200 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                />
               </div>
             ))}
           </div>
@@ -310,8 +547,8 @@ export default function Permintaan({ isDarkMode = false }) {
                 {/* Row 1: RM KPIs */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {[
-                        { title: "NILAI EKSPORT (RM)", val: data.kpi.nilaiEksportRM, icon: Wallet, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/30" },
-                        { title: "NILAI PENGGUNAAN (RM)", val: data.kpi.nilaiPenggunaanRM, icon: Banknote, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/30" },
+                        { title: "NILAI EKSPORT (RM)", source: "SUMBER DATA: KPKM", val: data.kpi.nilaiEksportRM, icon: Wallet, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/30" },
+                        { title: "NILAI PENGGUNAAN - ISI RUMAH (RM)", val: data.kpi.nilaiPenggunaanRM, icon: Banknote, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/30" },
                         { title: "JUMLAH NILAI (RM)", val: data.kpi.jumlahNilaiPasaranRM, icon: Landmark, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/30" }
                     ].map((kpi, i) => (
                         <div key={`rm-${i}`} className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl p-4 flex flex-col justify-center shadow-sm hover:shadow-md transition-shadow">
@@ -319,7 +556,8 @@ export default function Permintaan({ isDarkMode = false }) {
                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${kpi.bg} ${kpi.color}`}><kpi.icon className="w-4 h-4" /></div>
                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{kpi.title}</span>
                             </div>
-                            <span className={`text-lg md:text-xl font-black ${kpi.color}`}>{kpi.val ? (kpi.val/1000000).toFixed(2) + 'M' : "0.00"}</span>
+                            <span className={`text-lg md:text-xl font-black ${kpi.color}`}>{kpi.val != null ? formatFixed(kpi.val/1000000, 2) + 'M' : "–"}</span>
+                            {kpi.source && <span className="mt-1 text-[8px] font-semibold text-slate-400 dark:text-slate-500 tracking-wider">{kpi.source}</span>}
                         </div>
                     ))}
                 </div>
@@ -327,8 +565,8 @@ export default function Permintaan({ isDarkMode = false }) {
                 {/* Row 2: MT KPIs */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {[
-                        { title: "KUANTITI EKSPORT (MT)", val: data.kpi.eksportMT, icon: Package, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/30" },
-                        { title: "KUANTITI PENGGUNAAN (MT)", val: data.kpi.penggunaanMT, icon: Box, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/30" },
+                        { title: "KUANTITI EKSPORT (MT)", source: "SUMBER DATA: KPKM", val: data.kpi.eksportMT, icon: Package, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/30" },
+                        { title: "KUANTITI PENGGUNAAN - ISI RUMAH (MT)", val: data.kpi.penggunaanMT, icon: Box, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/30" },
                         { title: "JUMLAH KUANTITI (MT)", val: data.kpi.jumlahPasaranMT, icon: Layers, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/30" }
                     ].map((kpi, i) => (
                         <div key={`mt-${i}`} className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl p-4 flex flex-col justify-center shadow-sm hover:shadow-md transition-shadow">
@@ -336,7 +574,8 @@ export default function Permintaan({ isDarkMode = false }) {
                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${kpi.bg} ${kpi.color}`}><kpi.icon className="w-4 h-4" /></div>
                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{kpi.title}</span>
                             </div>
-                            <span className={`text-lg md:text-xl font-black ${kpi.color}`}>{kpi.val ? (kpi.val/1000).toFixed(1) + 'k' : "0.0"}</span>
+                            <span className={`text-lg md:text-xl font-black ${kpi.color}`}>{kpi.val != null ? formatFixed(kpi.val/1000, 1) + 'k' : "–"}</span>
+                            {kpi.source && <span className="mt-1 text-[8px] font-semibold text-slate-400 dark:text-slate-500 tracking-wider">{kpi.source}</span>}
                         </div>
                     ))}
                 </div>
@@ -347,7 +586,7 @@ export default function Permintaan({ isDarkMode = false }) {
         <div className="flex flex-col md:flex-row gap-4 h-[300px]">
           
           <div className="flex-[0.35] flex flex-col gap-3">
-             <div className="bg-white dark:bg-slate-800 py-3 px-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700"><span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">EKSPORT (MOD)</span></div>
+             <div className="bg-white dark:bg-slate-800 py-3 px-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between gap-2"><span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">EKSPORT</span><span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 tracking-wider">SUMBER DATA: DATA KASTAM</span></div>
              <div className="flex-1 flex flex-col gap-3">
                 {[{ icon: Truck, label: "DARAT", val: `${data.transport.darat}%` }, { icon: Ship, label: "LAUT", val: `${data.transport.laut}%` }, { icon: Plane, label: "UDARA", val: `${data.transport.udara}%` }].map((t, i) => (
                   <div key={i} className="flex-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center p-3 transition-colors hover:border-blue-200">
@@ -373,15 +612,21 @@ export default function Permintaan({ isDarkMode = false }) {
           </div>
 
           <div className="flex-[0.4] flex flex-col gap-3">
-             <div className="bg-white dark:bg-slate-800 py-3 px-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700"><span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">SEGMEN</span></div>
-             <div className="flex-1 flex flex-col gap-3">
+             <div className="bg-white dark:bg-slate-800 py-2.5 px-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col gap-1 shrink-0">
+               <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">SEGMEN PENGGUNAAN DOMESTIK</span>
+               <span className="text-[8px] font-bold text-slate-400 tracking-wider uppercase leading-tight">Jumlah Penggunaan (Isi Rumah + Hospitaliti + Kilang)</span>
+               <span className="text-base md:text-lg font-black leading-tight text-emerald-600 dark:text-emerald-400">
+                 {formatFixed((data.segmen.isirumahMT ?? 0) + (data.segmen.hospitalitiMT ?? 0) + (data.segmen.kilangMT ?? 0), 2)} <span className="text-[10px] font-bold opacity-70">MT</span>
+               </span>
+             </div>
+             <div className="flex-1 min-h-0 flex flex-col gap-2">
                 {[
                   { icon: Home, label: "ISI RUMAH", val: `${data.segmen.isirumah}%`, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/30" },
                   { icon: Hotel, label: "HOSPITALITI", val: `${data.segmen.hospitaliti}%`, color: "text-orange-600 dark:text-orange-500", bg: "bg-orange-50 dark:bg-orange-900/30" },
                   { icon: Building2, label: "KILANG", val: `${data.segmen.kilang}%`, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/30" }
                 ].map((s, i) => (
-                  <div key={i} className="flex-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center p-3">
-                     <div className={`p-2 rounded-lg mr-3 ${s.bg} ${s.color}`}>
+                  <div key={i} className="flex-1 min-h-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center px-3 py-1.5">
+                     <div className={`p-1.5 rounded-lg mr-3 ${s.bg} ${s.color}`}>
                        <s.icon className="w-4 h-4" />
                      </div>
                      <div className="flex flex-col">
@@ -402,20 +647,20 @@ export default function Permintaan({ isDarkMode = false }) {
           <>
             <div className="flex flex-col md:flex-row gap-4">
               {renderProgressTable("5 NEGARA UTAMA EKSPORT", ["Negara", "Nilai (RM)", "Kuantiti (MT)", "% Syer"], data.top5Eksport, "qty", "qtyPct")}
-              {renderProgressTable("5 LOKASI UTAMA PENGGUNAAN", ["Negeri", null, "Kuantiti (MT)", "% Syer"], data.top5Penggunaan, "qty", "pct", false)}
+              {renderProgressTable("5 LOKASI UTAMA PENGGUNAAN (ISI RUMAH)", ["Negeri", null, "Kuantiti (MT)", "% Syer"], data.top5Penggunaan, "qty", "pct", false)}
             </div>
 
             <div className="h-[450px] min-h-[450px] w-full bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden flex flex-col p-2">
                 <div className="absolute top-4 left-4 z-20 flex bg-white/90 dark:bg-slate-900/90 p-1.5 rounded-xl border border-slate-100 shadow-sm backdrop-blur">
                   <button onClick={() => setMapToggle('eksport')} className={`text-[10px] font-bold uppercase px-4 py-2 rounded-lg transition-all ${mapToggle === 'eksport' ? 'bg-orange-50 text-orange-600 border border-orange-100' : 'text-slate-500 hover:bg-slate-50'}`}>Aliran Eksport</button>
-                  <button onClick={() => setMapToggle('penggunaan')} className={`text-[10px] font-bold uppercase px-4 py-2 rounded-lg transition-all ${mapToggle === 'penggunaan' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'text-slate-500 hover:bg-slate-50'}`}>Peta Penggunaan</button>
+                  <button onClick={() => setMapToggle('penggunaan')} className={`text-[10px] font-bold uppercase px-4 py-2 rounded-lg transition-all ${mapToggle === 'penggunaan' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'text-slate-500 hover:bg-slate-50'}`}>Peta Penggunaan - Isi Rumah</button>
                 </div>
                 
                 <div className="w-full h-full relative mt-12 rounded-xl overflow-hidden bg-slate-50/50 dark:bg-slate-900/50">
                   {mapToggle === 'eksport' ? (
-                    <MalaysiaFlowMap selectedCommodity={selectedKomoditi === "Semua Komoditi" ? "" : selectedKomoditi.toLowerCase()} selectedYear={selectedTahun === "All" ? "2024" : selectedTahun} forceMode="eksport" filterMultiplier={data.filterMultiplier} />
+                    <MalaysiaFlowMap selectedCommodity={selectedKomoditi === "Semua Komoditi" ? "" : selectedKomoditi.toLowerCase()} selectedYear={selectedTahun === "All" ? "2024" : selectedTahun} forceMode="eksport" filterMultiplier={data.filterMultiplier} realCountryStats={realCountryStats} flowAnchorCountry="MALAYSIA" realTopExportPartners={realTopExportPartners} />
                   ) : (
-                    <MalaysiaPenggunaanMap selectedCommodity={selectedKomoditi === "Semua Komoditi" ? "" : selectedKomoditi.toLowerCase()} selectedYear={selectedTahun === "All" ? "2024" : selectedTahun} selectedNegeri={selectedNegeri} isDarkMode={isDarkMode} filterMultiplier={data.filterMultiplier} />
+                    <MalaysiaPenggunaanMap selectedCommodity={selectedKomoditi === "Semua Komoditi" ? "" : selectedKomoditi.toLowerCase()} selectedYear={selectedTahun === "All" ? "2024" : selectedTahun} selectedNegeri={selectedNegeri} isDarkMode={isDarkMode} filterMultiplier={data.filterMultiplier} realConsumptionByState={realConsumptionByState} realConsumptionByStateDistrict={realConsumptionByStateDistrict} realProductionByStateDistrict={realProductionByStateDistrict} />
                   )}
                 </div>
             </div>
@@ -426,11 +671,11 @@ export default function Permintaan({ isDarkMode = false }) {
         {activeTab === 1 && (
           <div className="flex flex-col gap-4">
              <div className="flex flex-col md:flex-row gap-4">
-              {renderProgressTable("5 LOKASI UTAMA PENGGUNAAN", ["Lokasi", "", "Kuantiti (MT)", "% Syer"], data.top5Penggunaan, "qty", "pct", false)}
+              {renderProgressTable("5 LOKASI UTAMA PENGGUNAAN (ISI RUMAH)", ["Lokasi", "", "Kuantiti (MT)", "% Syer"], data.top5Penggunaan, "qty", "pct", false)}
 
               <div className="flex-1 flex flex-col bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden shadow-sm">
                 <div className="p-4 border-b border-slate-50 dark:border-slate-700/50 flex justify-between items-center relative z-10">
-                  <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">5 LOKASI UTAMA DIPASARKAN</span>
+                  <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">5 PASARAN UTAMA DIPASARKAN</span>
                   <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-100 dark:border-slate-700">
                       <button onClick={() => setPasaranToggle('Global')} className={`px-2 py-1 rounded-md text-[8px] font-bold transition-all ${pasaranToggle === 'Global' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>GLOBAL</button>
                       <button onClick={() => setPasaranToggle('Negeri')} className={`px-2 py-1 rounded-md text-[8px] font-bold transition-all ${pasaranToggle === 'Negeri' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>NEGERI</button>
@@ -474,7 +719,7 @@ export default function Permintaan({ isDarkMode = false }) {
               </div>
               <div className="flex-[1.6] bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-2 shadow-sm relative overflow-hidden flex flex-col min-h-[400px]">
                 <div className="flex-1 relative w-full h-full bg-slate-50/50 dark:bg-slate-900/50 rounded-xl">
-                  <MalaysiaPenggunaanMap selectedCommodity={selectedKomoditi === "Semua Komoditi" ? "" : selectedKomoditi.toLowerCase()} selectedYear={selectedTahun === "All" ? "2024" : selectedTahun} selectedNegeri={selectedNegeri} isDarkMode={isDarkMode} filterMultiplier={data.filterMultiplier} />
+                  <MalaysiaPenggunaanMap selectedCommodity={selectedKomoditi === "Semua Komoditi" ? "" : selectedKomoditi.toLowerCase()} selectedYear={selectedTahun === "All" ? "2024" : selectedTahun} selectedNegeri={selectedNegeri} isDarkMode={isDarkMode} filterMultiplier={data.filterMultiplier} realConsumptionByState={realConsumptionByState} realConsumptionByStateDistrict={realConsumptionByStateDistrict} realProductionByStateDistrict={realProductionByStateDistrict} />
                 </div>
               </div>
             </div>
@@ -486,19 +731,20 @@ export default function Permintaan({ isDarkMode = false }) {
           <div className="flex flex-col gap-4">
              <div className="flex flex-col lg:flex-row gap-4 h-[450px]">
                 <div className="flex-[0.6] bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 shadow-sm flex flex-col">
-                  <h3 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest text-center mb-2">EKSPORT (MT) MENGIKUT PELABUHAN</h3>
+                  <h3 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest text-center">EKSPORT (MT) MENGIKUT PELABUHAN</h3>
+                  <span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 tracking-wider text-center mb-2">SUMBER DATA: DATA KASTAM</span>
                   <div className="flex-1 w-full"><ReactECharts option={portBarOption} style={{ height: '100%', width: '100%' }} notMerge={true} /></div>
                 </div>
 
                 <div className="flex-[1.4] bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-2 shadow-sm relative overflow-hidden flex flex-col">
                     <div className="w-full h-full relative bg-slate-50/50 dark:bg-slate-900/50 rounded-xl overflow-hidden">
-                        <MalaysiaFlowMap selectedCommodity={selectedKomoditi === "Semua Komoditi" ? "" : selectedKomoditi.toLowerCase()} selectedYear={selectedTahun === "All" ? "2024" : selectedTahun} forceMode="eksport" showTransportToggle={true} filterMultiplier={data.filterMultiplier} />
+                        <MalaysiaFlowMap selectedCommodity={selectedKomoditi === "Semua Komoditi" ? "" : selectedKomoditi.toLowerCase()} selectedYear={selectedTahun === "All" ? "2024" : selectedTahun} forceMode="eksport" showTransportToggle={true} filterMultiplier={data.filterMultiplier} realCountryStats={realCountryStats} flowAnchorCountry="MALAYSIA" realTopExportPartners={realTopExportPartners} />
                     </div>
                 </div>
              </div>
 
              <div className="w-full bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden shadow-sm flex flex-col">
-                <div className="p-4 border-b border-slate-50 dark:border-slate-700/50"><h3 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">BUTIRAN TRANSAKSI EKSPORT</h3></div>
+                <div className="p-4 border-b border-slate-50 dark:border-slate-700/50 flex items-center justify-between gap-2"><h3 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">BUTIRAN TRANSAKSI EKSPORT</h3><span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500 tracking-wider">SUMBER DATA: DATA KASTAM</span></div>
                 <div className="overflow-x-auto flex-1 p-2">
                   <table className="w-full text-left border-collapse min-w-[800px]">
                     <thead className="bg-slate-50/50 dark:bg-slate-800/50 text-slate-400 text-[9px] uppercase tracking-wider rounded-lg">
@@ -526,8 +772,8 @@ export default function Permintaan({ isDarkMode = false }) {
                       ))}
                       <tr className="bg-emerald-50/50 dark:bg-emerald-900/10 font-bold border-t-2 border-emerald-100 dark:border-emerald-800/30">
                         <td className="p-3 text-emerald-700 dark:text-emerald-400" colSpan="2">JUMLAH</td>
-                        <td className="p-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">{(2549409.24 * data.filterMultiplier).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                        <td className="p-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">{(6821098907.96 * data.filterMultiplier).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                        <td className="p-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">{data.eksportTableTotals.qty.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                        <td className="p-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">{data.eksportTableTotals.rm.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
                         <td colSpan="3"></td>
                       </tr>
                     </tbody>

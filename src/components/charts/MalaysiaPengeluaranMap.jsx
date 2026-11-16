@@ -1,14 +1,22 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
 import * as echarts from 'echarts';
-
-export default function MalaysiaPengeluaranMap({ 
-  selectedCommodity = "", 
-  selectedYear = "2025"
+import { MALAYSIA_STATE_COORDINATES } from '../../config/malaysiaStateCoordinates';
+import { getCountryCoords } from '../../config/countryCoordinates';
+ 
+export default function MalaysiaPengeluaranMap({
+  selectedCommodity = "",
+  selectedYear = "2025",
+  variant = 'production', // 'production' (default: bubbles=production, lines=import flows) or 'pasaran' (bubbles/points=where it's marketed, no flow lines)
+  realProductionByState = null, // [{name, value}] from PRODUCTION — real per-state production (MT)
+  realImportByState = null, // [{name, value, qty}] from TRADE_LOGISTIC+REF_PORT — real import reaching ports in each state
+  realCountryStateFlows = null, // [{country, state, value}] real top origin-country -> entry-state import flows
+  realPasaranByState = null, // [{lokasi, qty, pct}] from MARKET_FLOW (computeTopMarketStates) — full list, not capped at 5
+  realPasaranCountries = null, // [{lokasi, qty, pct}] from MARKET_FLOW (computeTopMarketCountries) — full list, not capped at 5
 }) {
   const chartRef = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-
+ 
   // Koordinat Rujukan
   const locs = {
     // Koordinat Negeri di Malaysia
@@ -25,14 +33,14 @@ export default function MalaysiaPengeluaranMap({
     indonesia: [101.4498, 0.5093], 
     vietnam: [108.2772, 14.0583],
   };
-
+ 
   useEffect(() => {
     const loadMaps = async () => {
       try {
         // 1. Muat turun peta dunia
         const worldRes = await fetch('https://unpkg.com/echarts@4.9.0/map/json/world.json');
         const worldGeo = await worldRes.json();
-
+ 
         // 2. Cuba muat turun peta sempadan negeri Malaysia
         let myGeo = null;
         try {
@@ -46,7 +54,7 @@ export default function MalaysiaPengeluaranMap({
         } catch (err) {
           console.warn("Fail malaysia_state.geojson tidak dijumpai. Menggunakan peta dunia sahaja.");
         }
-
+ 
         // 3. Gabungkan peta jika fail geojson negeri wujud
         if (myGeo && myGeo.features) {
           const filteredWorld = worldGeo.features.filter(f => f.properties.name !== 'Malaysia');
@@ -71,53 +79,94 @@ export default function MalaysiaPengeluaranMap({
         console.error("Ralat kritikal memuatkan peta:", error);
       }
     };
-
+ 
     loadMaps();
   }, []);
-
+ 
   const chartData = useMemo(() => {
-    const yearMult = selectedYear === '2024' ? 0.85 : 1.0;
 
-    // 1. Data Pengeluaran (Buih / Bubble) beserta 'Bekalan Luar'
-    const stateProduction = [
-      { name: 'Pahang', value: 348330 * yearMult, bekalanLuar: 45000 * yearMult, coords: locs.pahang },
-      { name: 'Johor', value: 244200 * yearMult, bekalanLuar: 35000 * yearMult, coords: locs.johor },
-      { name: 'Selangor', value: 141662 * yearMult, bekalanLuar: 85000 * yearMult, coords: locs.selangor },
-      { name: 'Kelantan', value: 95000 * yearMult, bekalanLuar: 12000 * yearMult, coords: locs.kelantan },
-      { name: 'Kedah', value: 85000 * yearMult, bekalanLuar: 10000 * yearMult, coords: locs.kedah },
-      { name: 'Melaka', value: 45000 * yearMult, bekalanLuar: 18000 * yearMult, coords: locs.melaka },
-      { name: 'Sabah', value: 180000 * yearMult, bekalanLuar: 25000 * yearMult, coords: locs.sabah },
-      { name: 'Sarawak', value: 160000 * yearMult, bekalanLuar: 22000 * yearMult, coords: locs.sarawak }
-    ];
+    // --- "pasaran" variant: bubbles/points show ONLY where the commodity is
+    // actually marketed (MARKET_FLOW data, the same source as the "5 LOKASI
+    // UTAMA DIPASARKAN" table, but the full list rather than capped at 5) —
+    // no production bubbles, no import/domestic flow lines, since those
+    // represent different data than "where is this sold". ---
+    if (variant === 'pasaran') {
+      const bubbleData = (realPasaranByState || [])
+        .map((state) => {
+          const coords = MALAYSIA_STATE_COORDINATES[state.lokasi];
+          if (!coords) return null;
+          return { name: state.lokasi, value: [...coords, state.qty] };
+        })
+        .filter(Boolean);
 
-    const bubbleData = stateProduction.map(state => ({
-      name: state.name,
-      // Array data: [Longitude, Latitude, Pengeluaran(MT), BekalanLuar(MT)]
-      value: [...state.coords, state.value, state.bekalanLuar]
-    }));
+      const foreignPoints = (realPasaranCountries || [])
+        .map((c) => {
+          const coords = getCountryCoords(c.lokasi);
+          if (!coords) return null;
+          return { name: c.lokasi, value: [...coords, c.qty] };
+        })
+        .filter(Boolean);
 
-    // 2. Aliran (Flow) Negeri & Luar Negara
-    const flows = [
+      return { bubbleData, flows: [], foreignPoints };
+    }
+
+    // --- Real production bubbles (PRODUCTION tab) only. realImportByState
+    // gives each state's real "external supply" (import reaching ports
+    // located in that state) to pair with production; a state with no
+    // real import figure gets 0 (not a fabricated number) for that
+    // dimension. No real data at all means no bubbles, rather than a
+    // fixed hardcoded state list. ---
+    let bubbleData, foreignPoints, flows;
+
+    if (realProductionByState && realProductionByState.length > 0) {
+      const importByStateMap = new Map((realImportByState || []).map((s) => [s.name, s.qty]));
+
+      bubbleData = realProductionByState
+        .map((state) => {
+          const coords = MALAYSIA_STATE_COORDINATES[state.name];
+          if (!coords) return null;
+          const bekalanLuar = importByStateMap.get(state.name) || 0;
+          return { name: state.name, value: [...coords, state.value, bekalanLuar] };
+        })
+        .filter(Boolean);
+    } else {
+      bubbleData = [];
+    }
+
+    // --- Real import flow lines (country -> entry state) only. No real
+    // data means no lines, rather than fixed decorative flows. ---
+    if (realCountryStateFlows && realCountryStateFlows.length > 0) {
+      const seenCountries = new Map();
+      flows = [];
+      for (const { country, state, value } of realCountryStateFlows) {
+        const stateCoords = MALAYSIA_STATE_COORDINATES[state];
+        const countryCoords = getCountryCoords(country);
+        if (!stateCoords || !countryCoords) continue;
+        seenCountries.set(country, countryCoords);
+        flows.push({
+          coords: [countryCoords, stateCoords], from: country, to: state, type: 'import',
+          lineStyle: { color: '#0ea5e9', width: 2, opacity: 0.8, curveness: 0.15 },
+        });
+      }
+      foreignPoints = [...seenCountries.entries()].map(([name, coords]) => ({ name, value: coords }));
+    } else {
+      flows = [];
+      foreignPoints = [];
+    }
+ 
+    // Domestic inter-state flows (Pahang -> Selangor, etc.) stay decorative
+    // — no tab in the sheet tracks actual interstate shipment movements,
+    // so this remains illustrative rather than real.
+    const domesticFlows = [
       { coords: [locs.pahang, locs.selangor], from: 'Pahang', to: 'Selangor', type: 'domestik', lineStyle: { color: '#fcd34d', width: 2.5, opacity: 0.9, curveness: 0.2 } },
       { coords: [locs.johor, locs.melaka], from: 'Johor', to: 'Melaka', type: 'domestik', lineStyle: { color: '#fcd34d', width: 2, opacity: 0.9, curveness: -0.2 } },
       { coords: [locs.kedah, locs.selangor], from: 'Kedah', to: 'Selangor', type: 'domestik', lineStyle: { color: '#fcd34d', width: 1.5, opacity: 0.9, curveness: 0.15 } },
       { coords: [locs.sabah, locs.selangor], from: 'Sabah', to: 'Selangor', type: 'domestik', lineStyle: { color: '#fcd34d', width: 1.5, opacity: 0.8, curveness: 0.3 } },
-      
-      { coords: [locs.thailand, locs.kelantan], from: 'Thailand', to: 'Kelantan', type: 'import', lineStyle: { color: '#0ea5e9', width: 2, opacity: 0.8, curveness: 0.2 } },
-      { coords: [locs.thailand, locs.kedah], from: 'Thailand', to: 'Kedah', type: 'import', lineStyle: { color: '#0ea5e9', width: 2, opacity: 0.8, curveness: -0.1 } },
-      { coords: [locs.indonesia, locs.johor], from: 'Indonesia', to: 'Johor', type: 'import', lineStyle: { color: '#0ea5e9', width: 2, opacity: 0.8, curveness: 0.1 } },
-      { coords: [locs.vietnam, locs.pahang], from: 'Vietnam', to: 'Pahang', type: 'import', lineStyle: { color: '#0ea5e9', width: 1.5, opacity: 0.6, curveness: 0.2 } }
     ];
-
-    const foreignPoints = [
-      { name: 'Thailand', value: locs.thailand },
-      { name: 'Indonesia', value: locs.indonesia },
-      { name: 'Vietnam', value: locs.vietnam }
-    ];
-
-    return { bubbleData, flows, foreignPoints };
-  }, [selectedCommodity, selectedYear]);
-
+ 
+    return { bubbleData, flows: [...domesticFlows, ...flows], foreignPoints };
+  }, [selectedCommodity, selectedYear, variant, realProductionByState, realImportByState, realCountryStateFlows, realPasaranByState, realPasaranCountries]);
+ 
   const option = mapLoaded ? {
     backgroundColor: 'transparent',
     tooltip: {
@@ -129,8 +178,9 @@ export default function MalaysiaPengeluaranMap({
       formatter: function (params) {
         if (params.seriesName === 'Pengeluaran Negeri') {
           // params.value[2] = Pengeluaran, params.value[3] = Bekalan Luar
-          const pengeluaran = params.value[2] ? params.value[2].toLocaleString(undefined, {maximumFractionDigits: 0}) : "0";
-          const bekalanLuar = params.value[3] ? params.value[3].toLocaleString(undefined, {maximumFractionDigits: 0}) : "0";
+          const fmt2 = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+          const pengeluaran = (params.value[2] || 0).toLocaleString(undefined, fmt2);
+          const bekalanLuar = (params.value[3] || 0).toLocaleString(undefined, fmt2);
           
           return `<div style="font-weight:bold; border-bottom:1px solid rgba(56,189,248,0.3); padding-bottom:4px; margin-bottom:4px; text-transform:uppercase;">${params.name}</div>
                   <div style="display:flex; justify-content:space-between; gap:20px; margin-bottom:2px;">
@@ -140,6 +190,15 @@ export default function MalaysiaPengeluaranMap({
                   <div style="display:flex; justify-content:space-between; gap:20px;">
                     <span style="color:#94a3b8;">Bekalan Luar:</span> 
                     <span style="color:#38bdf8; font-weight:bold;">${bekalanLuar} MT</span>
+                  </div>`;
+        }
+        if (params.seriesName === 'Pasaran Negeri' || params.seriesName === 'Pasaran Luar Negara') {
+          const qty = params.value[2] ? params.value[2].toLocaleString(undefined, {maximumFractionDigits: 0}) : "0";
+          const accent = params.seriesName === 'Pasaran Negeri' ? '#4ade80' : '#38bdf8';
+          return `<div style="font-weight:bold; border-bottom:1px solid rgba(56,189,248,0.3); padding-bottom:4px; margin-bottom:4px; text-transform:uppercase;">${params.name}</div>
+                  <div style="display:flex; justify-content:space-between; gap:20px;">
+                    <span style="color:#94a3b8;">Pasaran:</span>
+                    <span style="color:${accent}; font-weight:bold;">${qty} MT</span>
                   </div>`;
         }
         if (params.seriesType === 'lines') {
@@ -156,7 +215,13 @@ export default function MalaysiaPengeluaranMap({
       left: 'right',
       bottom: '5%',
       min: 0,
-      max: 400000,
+      max: variant === 'pasaran'
+        ? Math.max(1, ...chartData.bubbleData.map((b) => b.value[2] || 0))
+        : Math.max(400000, ...chartData.bubbleData.map((b) => b.value[2] || 0)),
+      // Only size/color the main negeri bubble series — the foreign-point
+      // series carries its own fixed styling below and shouldn't be
+      // recolored by this scale.
+      seriesIndex: 0,
       text: ['Tinggi', 'Rendah'],
       calculable: true,
       inRange: {
@@ -184,7 +249,7 @@ export default function MalaysiaPengeluaranMap({
     },
     series: [
       {
-        name: 'Pengeluaran Negeri',
+        name: variant === 'pasaran' ? 'Pasaran Negeri' : 'Pengeluaran Negeri',
         type: 'effectScatter', // <-- Ditukar dari 'scatter' ke 'effectScatter'
         coordinateSystem: 'geo',
         zlevel: 3,
@@ -205,22 +270,22 @@ export default function MalaysiaPengeluaranMap({
         data: chartData.flows
       },
       {
-        name: 'Lokasi Luar',
+        name: variant === 'pasaran' ? 'Pasaran Luar Negara' : 'Lokasi Luar',
         type: 'effectScatter',
         coordinateSystem: 'geo',
         zlevel: 3,
         rippleEffect: { brushType: 'stroke', scale: 2.5 },
-        label: { show: true, position: 'right', formatter: '{b}', fontSize: 9, fontWeight: 'bold', color: '#94a3b8' },
-        itemStyle: { color: '#94a3b8' },
+        label: { show: true, position: 'right', formatter: '{b}', fontSize: variant === 'pasaran' ? 10 : 9, fontWeight: 'bold', color: variant === 'pasaran' ? '#f8fafc' : '#94a3b8' },
+        itemStyle: { color: variant === 'pasaran' ? '#38bdf8' : '#94a3b8' },
         data: chartData.foreignPoints
       }
     ]
   } : {};
-
+ 
   if (!mapLoaded) {
     return <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs animate-pulse">Memuatkan Peta Pengeluaran...</div>;
   }
-
+ 
   return (
     <div className="w-full h-full relative">
       <ReactECharts ref={chartRef} echarts={echarts} option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />

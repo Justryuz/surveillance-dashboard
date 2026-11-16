@@ -25,8 +25,19 @@ export async function fetchSheetCSV(url) {
     return cached.rows;
   }
 
-  const response = await fetch(url);
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (err) {
+    // Typically a CORS or network-level failure (e.g. the underlying
+    // Google Sheet's "Share" general access isn't set to "Anyone with the
+    // link", so an anonymous fetch() gets blocked even though visiting the
+    // URL directly in a signed-in browser tab works fine).
+    console.error('[googleSheets] fetch failed for', url, err);
+    throw new Error(`Could not load sheet — check its "Share" (general access) setting is "Anyone with the link": ${url}`);
+  }
   if (!response.ok) {
+    console.error('[googleSheets] non-OK response for', url, response.status);
     throw new Error(`Failed to fetch sheet (${response.status}): ${url}`);
   }
   const csvText = await response.text();

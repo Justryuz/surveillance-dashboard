@@ -1,32 +1,44 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, useSearchParams } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
 import SubNav from './components/layout/SubNav';
+import ErrorBoundary from './components/common/ErrorBoundary';
 
+// Home page loads with the main bundle; the other pages are split into their
+// own chunks and only downloaded when the user opens them.
 import HalamanUtama from './pages/HalamanUtama';
-import Pembekalan from './pages/Pembekalan';
-import Permintaan from './pages/Permintaan';
-import Pemborongan from './pages/Pemborongan';
+const Pembekalan = lazy(() => import('./pages/Pembekalan'));
+const Permintaan = lazy(() => import('./pages/Permintaan'));
+const Pemborongan = lazy(() => import('./pages/Pemborongan'));
+
+const PageLoading = () => (
+  <div className="h-full w-full flex items-center justify-center text-slate-400 text-xs animate-pulse">
+    Memuatkan halaman...
+  </div>
+);
 
 function AppContent() {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  // ?embed=1 -> compact layout for iframes (no SubNav, title banner, footer, theme toggle)
   const [searchParams] = useSearchParams();
   const isEmbedded = searchParams.get('embed') === '1';
 
   return (
     <div className={`${isDarkMode ? 'dark' : ''} font-sans relative h-full w-full`}>
       
-      <div className={`h-full w-full bg-slate-50 dark:bg-slate-950 ${isEmbedded ? 'p-0' : 'p-1 md:p-2'} flex flex-col transition-colors duration-300`}>
+      {/* h-full instead of h-screen so it respects iframe/container height */}
+      <div className={`h-full w-full bg-slate-50 dark:bg-slate-950 ${isEmbedded ? 'p-0' : 'p-2 md:p-4'} flex flex-col transition-colors duration-300`}>
         
-        <div className={`flex-1 min-h-0 w-full bg-white dark:bg-slate-900 ${isEmbedded ? 'rounded-none border-0 p-1.5' : 'rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-2 md:p-3'} flex flex-col relative transition-colors duration-300 overflow-hidden`}>
+        {/* Card Container */}
+        <div className={`flex-1 min-h-0 w-full bg-white dark:bg-slate-900 ${isEmbedded ? 'rounded-none border-0 p-1.5' : 'rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-3 md:p-4'} flex flex-col relative transition-colors duration-300 overflow-hidden`}>
           
           {!isEmbedded && (
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="absolute top-2 right-3 md:top-3 md:right-4 p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors z-50 shrink-0"
+              className="absolute top-3 right-4 md:top-4 md:right-5 p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors z-50 shrink-0"
               title="Toggle Theme"
             >
-              {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
           )}
 
@@ -38,14 +50,19 @@ function AppContent() {
           )}
 
           {/* Main Content Area */}
-          <div className="flex-1 min-h-0 w-full text-slate-800 dark:text-slate-200 overflow-hidden">
+          <div className="flex-1 min-h-0 w-full text-slate-800 dark:text-slate-200 mt-1 overflow-hidden">
             <div className="h-full w-full">
-              <Routes>
-                <Route path="/" element={<HalamanUtama isDarkMode={isDarkMode} isEmbedded={isEmbedded} />} />
-                <Route path="/pembekalan" element={<Pembekalan />} />
-                <Route path="/permintaan" element={<Permintaan />} />
-                <Route path="/pemborongan" element={<Pemborongan />} />
-              </Routes>
+              <ErrorBoundary>
+                <Suspense fallback={<PageLoading />}>
+                  <Routes>
+                    {/* Propagating theme parameter to HalamanUtama component */}
+                    <Route path="/" element={<HalamanUtama isDarkMode={isDarkMode} isEmbedded={isEmbedded} />} />
+                    <Route path="/pembekalan" element={<Pembekalan />} />
+                    <Route path="/permintaan" element={<Permintaan />} />
+                    <Route path="/pemborongan" element={<Pemborongan />} />
+                  </Routes>
+                </Suspense>
+              </ErrorBoundary>
             </div>
           </div>
           

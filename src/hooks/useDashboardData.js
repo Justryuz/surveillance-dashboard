@@ -2,16 +2,16 @@ import { useEffect, useState, useCallback } from 'react';
 import { fetchSheetCSV, clearSheetCache } from '../lib/googleSheets';
 import { SHEET_URLS } from '../config/sheetsConfig';
 
-const TABS = ['PRODUCTION', 'CONSUMPTION_BY_STATE', 'MARKET_FLOW', 'TRADE_LOGISTIC', 'REF_PORT'];
+const TABS = ['PRODUCTION', 'CONSUMPTION_BY_STATE', 'CONSUMPTION_BY_MONTH', 'MARKET_FLOW', 'TRADE_LOGISTIC', 'REF_PORT', 'REF_COUNTRY', 'REF_KOMODITI'];
 
 /**
  * Loads every sheet tab needed to drive the map, top-5 lists, pie chart,
- * and route donuts on the home page (everything except IMPORT/EXPORT,
- * which useTradeData.js already covers).
+ * route donuts, and country-name standardization on the home page
+ * (everything except IMPORT/EXPORT, which useTradeData.js already covers).
  */
 export function useDashboardData() {
   const [data, setData] = useState({
-    PRODUCTION: [], CONSUMPTION_BY_STATE: [], MARKET_FLOW: [], TRADE_LOGISTIC: [], REF_PORT: [],
+    PRODUCTION: [], CONSUMPTION_BY_STATE: [], CONSUMPTION_BY_MONTH: [], MARKET_FLOW: [], TRADE_LOGISTIC: [], REF_PORT: [], REF_COUNTRY: [], REF_KOMODITI: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

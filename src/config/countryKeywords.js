@@ -13,7 +13,7 @@ export const FLOW_MAP_COUNTRY_KEYWORDS = {
   Indonesia: ['INDONESIA'],
   Thailand: ['THAILAND'],
   Filipina: ['PHILIPPINES'],
-  Brunei: ['BRUNEI'],
+  Brunei: ['BRUNEI DARUSSALAM'],
   Australia: ['AUSTRALIA'],
   'Amerika Syarikat': ['UNITED STATES'],
 };

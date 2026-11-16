@@ -12,7 +12,7 @@ function filterRows(rows, { year, monthCode, commodityKeyword, categoryKeyword }
   return rows.filter((row) =>
     matchesYear(row, year, 'Tahun') &&
     matchesMonth(row, monthCode, 'Bulan') &&
-    matchesCommodityKeyword(row, commodityKeyword, 'Jenis Komoditi') &&
+    matchesCommodityKeyword(row, commodityKeyword, 'Standard Jenis Komoditi') &&
     matchesCategoryKeyword(row, categoryKeyword, 'Kumpulan Barangan')
   );
 }
@@ -85,13 +85,87 @@ export function computeGlobalTradeStats(importRows, exportRows, filters) {
 }
 
 /**
- * Total quantity (converted to MT) across filtered rows — used for the
+ * Real Kategori ("Kumpulan Barangan") -> Komoditi ("Jenis Komoditi") tree
+ * built from IMPORT + EXPORT combined, scoped to the currently selected
+ * Tahun/Bulan. Powers the Insight Perdagangan Kategori/Komoditi dropdowns
+ * so they only ever offer combinations that actually have IMPORT/EXPORT
+ * rows — unlike PRODUCTION's tree (used by Insight Pembekalan), which can
+ * include commodities grown locally with zero trade activity.
+ * Returns { categories: string[], commoditiesByCategory: { [c]: string[] } },
+ * or null if neither sheet has loaded yet.
+ */
+export function computeTradeCategoryCommodityTree(importRows, exportRows, filters = {}) {
+  const allRows = [...(importRows || []), ...(exportRows || [])];
+  if (allRows.length === 0) return null;
+
+  const scoped = allRows.filter((row) =>
+    matchesYear(row, filters.year, 'Tahun') &&
+    matchesMonth(row, filters.monthCode, 'Bulan')
+  );
+
+  const commoditiesByCategory = {};
+  for (const row of scoped) {
+    const category = String(row['Kumpulan Barangan'] || '').trim();
+    const commodity = String(row['Standard Jenis Komoditi'] || '').trim();
+    if (!category || !commodity) continue;
+    if (!commoditiesByCategory[category]) commoditiesByCategory[category] = new Set();
+    commoditiesByCategory[category].add(commodity);
+  }
+
+  const categories = Object.keys(commoditiesByCategory).sort();
+  const result = {};
+  for (const category of categories) {
+    result[category] = [...commoditiesByCategory[category]].sort();
+  }
+  return { categories, commoditiesByCategory: result };
+}
+
+/** Total quantity (converted to MT) across filtered rows — used for the
  * "Import" / "Eksport" KPI numbers. The sheet's Kuantiti is already in the
  * unit given by its "Unit" column, which is consistently TONNE in the
  * sample data; if your sheet mixes units this sums them as-is. */
 export function computeQuantityTotal(rows, filters) {
   const filtered = filterRows(rows, filters);
   return filtered.reduce((sum, row) => sum + toNumber(row.Kuantiti), 0);
+}
+
+/** Total RM value across filtered rows — the "Nilai Import"/"Nilai Eksport"
+ * KPI numbers on Pembekalan.jsx. Returns null when nothing matched. */
+export function computeValueTotal(rows, filters) {
+  const filtered = filterRows(rows, filters);
+  if (filtered.length === 0) return null;
+  return filtered.reduce((sum, row) => sum + toNumber(row['Nilai (RM)']), 0);
+}
+
+/**
+ * Top-5 countries with qty (MT), qty share %, and RM value — matching the
+ * { negara, qty, qtyPct, nilai } shape Pembekalan.jsx's renderProgressTable
+ * expects (as opposed to computeGlobalTradeStats' { name, value, percent }
+ * shape used by HalamanUtama.jsx). Returns null when nothing matched.
+ */
+export function computeTop5CountriesDetailed(rows, filters) {
+  const filtered = filterRows(rows, filters);
+  if (filtered.length === 0) return null;
+
+  const totals = new Map(); // country -> { qty, nilai }
+  for (const row of filtered) {
+    const country = row.Negara || 'Tidak Diketahui';
+    const entry = totals.get(country) || { qty: 0, nilai: 0 };
+    entry.qty += toNumber(row.Kuantiti);
+    entry.nilai += toNumber(row['Nilai (RM)']);
+    totals.set(country, entry);
+  }
+
+  const grandTotalQty = [...totals.values()].reduce((s, e) => s + e.qty, 0);
+  return [...totals.entries()]
+    .map(([name, { qty, nilai }]) => ({
+      negara: toTitleCase(name),
+      qty,
+      qtyPct: grandTotalQty > 0 ? (qty / grandTotalQty) * 100 : 0,
+      nilai,
+    }))
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 5);
 }
 
 function sumByCountryRaw(rows) {

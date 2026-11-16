@@ -27,8 +27,25 @@ export const SHEET_URLS = {
   CONSUMPTION_BY_STATE: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT0rKXqWi4LPur--LAjJ2S3oZsYKvo19EmC-RsebtlhOY6MVufdcsMzG7JMXXrOMAMh5AkD8GJDk5Lc/pub?gid=1661592167&single=true&output=csv',
   CONSUMPTION_BY_MONTH: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT0rKXqWi4LPur--LAjJ2S3oZsYKvo19EmC-RsebtlhOY6MVufdcsMzG7JMXXrOMAMh5AkD8GJDk5Lc/pub?gid=1742082107&single=true&output=csv',
   MARKET_FLOW: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT0rKXqWi4LPur--LAjJ2S3oZsYKvo19EmC-RsebtlhOY6MVufdcsMzG7JMXXrOMAMh5AkD8GJDk5Lc/pub?gid=561041031&single=true&output=csv',
-  TRADE_LOGISTIC: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT0rKXqWi4LPur--LAjJ2S3oZsYKvo19EmC-RsebtlhOY6MVufdcsMzG7JMXXrOMAMh5AkD8GJDk5Lc/pub?gid=707957764&single=true&output=csv',
+  TRADE_LOGISTIC: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CjZ-qcsABs8X0CN8Ii-yQPtJ_UHmB3bSEYjRBV6ynOU1u15YrXuMsrtvXkpjmg/pub?gid=1429572517&single=true&output=csv',
   REF_PORT: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT0rKXqWi4LPur--LAjJ2S3oZsYKvo19EmC-RsebtlhOY6MVufdcsMzG7JMXXrOMAMh5AkD8GJDk5Lc/pub?gid=1894625263&single=true&output=csv',
+  GLOBAL_TRADE_FLOW: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTTdLQeKJGWtMBI5qBGKKURqkcDSlRWLD6g5OMgfH5suNgwvfr4_UC5tff2qvvbUw/pub?gid=642946361&single=true&output=csv',
+  PROFILING_PENGELUAR: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSsPQHhMtSEYtcNsASAyTHhG6UrTFu6qv78EH1PeiTo0pnJVElpn6APGqtpgP2vNA/pub?gid=1894980841&single=true&output=csv',
+  REF_COUNTRY: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT0rKXqWi4LPur--LAjJ2S3oZsYKvo19EmC-RsebtlhOY6MVufdcsMzG7JMXXrOMAMh5AkD8GJDk5Lc/pub?gid=421059681&single=true&output=csv',
+  // Raw Komoditi Name -> Standard Komoditi Name -> Kategori. Standardizes
+  // commodity names/categories across PRODUCTION, IMPORT/EXPORT,
+  // CONSUMPTION_BY_STATE, MARKET_FLOW, and TRADE_LOGISTIC before any
+  // grouping/matching happens, the same way REF_COUNTRY does for countries.
+  REF_KOMODITI: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT0rKXqWi4LPur--LAjJ2S3oZsYKvo19EmC-RsebtlhOY6MVufdcsMzG7JMXXrOMAMh5AkD8GJDk5Lc/pub?gid=1300788681&single=true&output=csv',
+
+  // Powers the "Pemborongan" (wholesaler) tab — a 4-tab survey/profile
+  // sheet (one row per respondent premise, plus per-commodity supply-need,
+  // supply-source, and market-channel detail rows joined back to the
+  // premise via No_Siri_Borang).
+  PEMBORONGAN_PROFILING: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQJVUKAGdFeEiPgWfyoRKNjYn1DHy8JlQXfFe_SOPHRNubp0fWonvj-bD7N3ObqaQ/pub?gid=37096474&single=true&output=csv',
+  PEMBORONGAN_KEPERLUAN: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQJVUKAGdFeEiPgWfyoRKNjYn1DHy8JlQXfFe_SOPHRNubp0fWonvj-bD7N3ObqaQ/pub?gid=81423740&single=true&output=csv',
+  PEMBORONGAN_SUMBER: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQJVUKAGdFeEiPgWfyoRKNjYn1DHy8JlQXfFe_SOPHRNubp0fWonvj-bD7N3ObqaQ/pub?gid=2061155140&single=true&output=csv',
+  PEMBORONGAN_SALURAN: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQJVUKAGdFeEiPgWfyoRKNjYn1DHy8JlQXfFe_SOPHRNubp0fWonvj-bD7N3ObqaQ/pub?gid=1685983117&single=true&output=csv',
 };
 
 // UI commodity codes mapped to keywords used to match rows in each tab.
@@ -68,5 +85,7 @@ export const NEGERI_CODE_TO_LABEL = {
   selangor: 'Selangor',
   terengganu: 'Terengganu',
   kl: 'W.P. Kuala Lumpur',
+  putrajaya: 'W.P. Putrajaya',
+  labuan: 'W.P. Labuan',
 };
 
