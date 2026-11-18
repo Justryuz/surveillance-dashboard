@@ -45,7 +45,7 @@ const NEGERI_OPTIONS = [
   ...Object.entries(NEGERI_CODE_TO_LABEL).map(([value, label]) => ({ value, label: label.toUpperCase() })),
 ];
 
-export default function HalamanUtama({ isDarkMode = false, isEmbedded = false }) {
+export default function HalamanUtama({ isDarkMode = false }) {
   // --- LIVE DATA FROM GOOGLE SHEET ---
   // useTradeData -> IMPORT / EXPORT tabs (trade totals + top-5 countries)
   // useDashboardData -> PRODUCTION, CONSUMPTION_BY_STATE, MARKET_FLOW,
@@ -586,11 +586,9 @@ export default function HalamanUtama({ isDarkMode = false, isEmbedded = false })
 
   return (
     <div className="flex flex-col gap-2 h-full w-full relative">
-      {!isEmbedded && (
-        <div className="shrink-0 flex flex-col items-center justify-center bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-blue-500/30 rounded-xl p-2 md:p-3 shadow-sm dark:shadow-[0_0_15px_rgba(59,130,246,0.1)]">
-          <h2 className="text-lg md:text-xl font-bold text-blue-700 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-blue-400 dark:to-cyan-300 uppercase tracking-widest text-center">PENGAWASAN BEKALAN & PASARAN NASIONAL</h2>
-        </div>
-      )}
+      <div className="shrink-0 flex flex-col items-center justify-center bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-blue-500/30 rounded-xl p-2 md:p-3 shadow-sm dark:shadow-[0_0_15px_rgba(59,130,246,0.1)]">
+        <h2 className="text-lg md:text-xl font-bold text-blue-700 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-blue-400 dark:to-cyan-300 uppercase tracking-widest text-center">PENGAWASAN BEKALAN & PASARAN NASIONAL</h2>
+      </div>
 
       <div className="flex items-center justify-between gap-3 flex-1 min-h-0 mt-1">
         <button onClick={handlePrev} className="shrink-0 p-2 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-blue-500/30 rounded-full text-slate-600 dark:text-blue-400 hover:bg-slate-100 hover:text-blue-600 transition-all"><ChevronLeft className="w-6 h-6 md:w-8 md:h-8" /></button>
@@ -822,12 +820,10 @@ export default function HalamanUtama({ isDarkMode = false, isEmbedded = false })
         <button onClick={handleNext} ><ChevronRight className="w-6 h-6 md:w-8 md:h-8" /></button>
       </div>
 
-      {!isEmbedded && (
-        <div className="shrink-0 flex items-center justify-between mt-1 pb-1 px-4 md:px-15">
-          <div className="flex flex-col text-[8px] md:text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-semibold"><span>Sumber Data: KPKM | DOA | FAMA | Tridge</span><span>Data Rujukan: Data Perdagangan | Data Pengeluaran | Data Penggunaan | Data KPASM | Data Kajian Profiling | Tridge</span></div>
-          <div className="flex gap-3">{[0, 1].map((index) => (<div key={index} onClick={() => setCurrentView(index)} className={`cursor-pointer w-3 h-3 rounded-full transition-all duration-300 ${currentView === index ? 'bg-blue-600 dark:bg-cyan-400 shadow-sm scale-125' : 'bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500'}`} title={viewTitles[index]} />))}</div>
-        </div>
-      )}
+      <div className="shrink-0 flex items-center justify-between mt-1 pb-1 px-4 md:px-15">
+        <div className="flex flex-col text-[8px] md:text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-semibold"><span>Sumber Data: KPKM | DOA | FAMA | Tridge</span><span>Data Rujukan: Data Perdagangan | Data Pengeluaran | Data Penggunaan | Data KPASM | Data Kajian Profiling | Tridge</span></div>
+        <div className="flex gap-3">{[0, 1].map((index) => (<div key={index} onClick={() => setCurrentView(index)} className={`cursor-pointer w-3 h-3 rounded-full transition-all duration-300 ${currentView === index ? 'bg-blue-600 dark:bg-cyan-400 shadow-sm scale-125' : 'bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500'}`} title={viewTitles[index]} />))}</div>
+      </div>
     </div>
   );
 }
