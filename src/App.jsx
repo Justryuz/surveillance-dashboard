@@ -37,18 +37,26 @@ function FitToFrame({ children }) {
     return () => ro.disconnect();
   }, []);
 
+  // The visible area is the frame's full width, and at most 16:10 tall
+  // (FIT_BASE_WIDTH x FIT_MIN_HEIGHT). A frame taller than that (e.g. a SISDA
+  // grid widget spanning many rows) keeps the dashboard at 16:10 at the top
+  // instead of stretching the map/charts; the rest of the frame stays empty.
+  // A shorter frame uses its full height.
+  const viewW = box ? box.w : 0;
+  const viewH = box ? Math.min(box.h, (box.w * FIT_MIN_HEIGHT) / FIT_BASE_WIDTH) : 0;
   // Never enlarge (max 1); shrink just enough that the canvas is at least
-  // FIT_BASE_WIDTH wide and FIT_MIN_HEIGHT tall. The canvas then takes the
-  // frame's own aspect ratio, so the scaled result fills the frame exactly.
-  const scale = box && box.w > 0 && box.h > 0
-    ? Math.min(1, box.w / FIT_BASE_WIDTH, box.h / FIT_MIN_HEIGHT)
+  // FIT_BASE_WIDTH wide and FIT_MIN_HEIGHT tall.
+  const scale = viewW > 0 && viewH > 0
+    ? Math.min(1, viewW / FIT_BASE_WIDTH, viewH / FIT_MIN_HEIGHT)
     : null;
 
   return (
     <div ref={ref} className="h-full w-full overflow-hidden">
       {scale && (
-        <div style={{ width: box.w / scale, height: box.h / scale, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-          {children}
+        <div style={{ width: viewW, height: viewH, overflow: 'hidden' }}>
+          <div style={{ width: viewW / scale, height: viewH / scale, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+            {children}
+          </div>
         </div>
       )}
     </div>
