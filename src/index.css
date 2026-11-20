@@ -3,6 +3,29 @@
 /* Tell Tailwind to listen to our .dark class toggle instead of Windows */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Embedded (iframe) mode lays the dashboard out on a desktop-size canvas
+   (>= 1440px, see FitToFrame in App.jsx) and scales it down. Media queries
+   still see the small iframe width, so without this the canvas would get the
+   narrow, stacked layout. Inside .embed-desktop the sm/md/lg/xl variants
+   apply as on a desktop screen; everywhere else they're the normal
+   breakpoints. */
+@custom-variant sm {
+  @media (width >= 40rem) { @slot; }
+  &:where(.embed-desktop, .embed-desktop *) { @slot; }
+}
+@custom-variant md {
+  @media (width >= 48rem) { @slot; }
+  &:where(.embed-desktop, .embed-desktop *) { @slot; }
+}
+@custom-variant lg {
+  @media (width >= 64rem) { @slot; }
+  &:where(.embed-desktop, .embed-desktop *) { @slot; }
+}
+@custom-variant xl {
+  @media (width >= 80rem) { @slot; }
+  &:where(.embed-desktop, .embed-desktop *) { @slot; }
+}
+
 /* Ensure full height chain works in both standalone and embedded (iframe) contexts */
 html, body, #root {
   height: 100%;
