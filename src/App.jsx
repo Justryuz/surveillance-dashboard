@@ -1,5 +1,5 @@
 import { useState, useRef, useLayoutEffect, lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, useSearchParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useSearchParams, useLocation } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
 import SubNav from './components/layout/SubNav';
 import ErrorBoundary from './components/common/ErrorBoundary';
@@ -25,11 +25,19 @@ const FIT_BASE_WIDTH = 1440;
 const FIT_MIN_HEIGHT = 900;
 
 function FitToFrame({ children }) {
-  const ref = useRef(null);
+  const frameRef = useRef(null);
+  const contentRef = useRef(null);
   const [box, setBox] = useState(null);
+  const [contentH, setContentH] = useState(0);
+  // Halaman Utama is a one-screen layout that fills whatever height it gets.
+  // The other pages are long (about 1,700px at 1440px wide); in an iframe
+  // they're laid out at their full natural height — so they never scroll
+  // inside the frame — and the whole page is shrunk to fit.
+  const { pathname } = useLocation();
+  const fitWholePage = pathname !== '/';
 
   useLayoutEffect(() => {
-    const el = ref.current;
+    const el = frameRef.current;
     // ResizeObserver also fires once right after observe(), which gives the
     // initial size.
     const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
@@ -37,24 +45,79 @@ function FitToFrame({ children }) {
     return () => ro.disconnect();
   }, []);
 
-  // The visible area is the frame's full width, and at most 16:10 tall
-  // (FIT_BASE_WIDTH x FIT_MIN_HEIGHT). A frame taller than that (e.g. a SISDA
-  // grid widget spanning many rows) keeps the dashboard at 16:10 at the top
-  // instead of stretching the map/charts; the rest of the frame stays empty.
-  // A shorter frame uses its full height.
-  const viewW = box ? box.w : 0;
-  const viewH = box ? Math.min(box.h, (box.w * FIT_MIN_HEIGHT) / FIT_BASE_WIDTH) : 0;
-  // Never enlarge (max 1); shrink just enough that the canvas is at least
-  // FIT_BASE_WIDTH wide and FIT_MIN_HEIGHT tall.
-  const scale = viewW > 0 && viewH > 0
-    ? Math.min(1, viewW / FIT_BASE_WIDTH, viewH / FIT_MIN_HEIGHT)
-    : null;
+  // How much of the frame is actually on screen: from the frame's top edge
+  // to the bottom of the browser window. A SISDA grid widget can be taller
+  // than the window, so fitting to the frame alone leaves the bottom of the
+  // dashboard below the fold. IntersectionObserver with the implicit root
+  // measures against the top-level window, and works in cross-origin
+  // iframes. Only readings where the frame's top is visible are used, so
+  // scrolling the host page doesn't make the dashboard shrink and grow.
+  const [visibleH, setVisibleH] = useState(null);
+  useLayoutEffect(() => {
+    const el = frameRef.current;
+    if (typeof IntersectionObserver === 'undefined') return undefined;
+    const thresholds = Array.from({ length: 101 }, (_, i) => i / 100);
+    const io = new IntersectionObserver(([entry]) => {
+      const target = entry.boundingClientRect;
+      const seen = entry.intersectionRect;
+      if (!entry.isIntersecting || seen.height <= 0) return;
+      if (Math.abs(seen.top - target.top) > 1) return; // top edge scrolled away
+      setVisibleH(Math.round(seen.bottom - target.top));
+    }, { threshold: thresholds });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  // Track the long page's natural height as its data loads and it reflows.
+  // offsetHeight is the untransformed layout height (unaffected by scale).
+  const hasBox = box !== null;
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!fitWholePage || !el) return undefined;
+    const ro = new ResizeObserver(() => setContentH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitWholePage, hasBox]);
+
+  let view = null; // { outerW, outerH, canvasW, canvasH (null = auto), scale }
+  if (box && box.w > 0 && box.h > 0) {
+    // Usable height: the frame, cut down to the part that's on screen.
+    const availH = visibleH && visibleH > 100 ? Math.min(box.h, visibleH) : box.h;
+    if (fitWholePage) {
+      // Canvas is at least FIT_BASE_WIDTH wide with auto height; shrink so
+      // both its width and its full height fit inside the usable area.
+      const canvasW = Math.max(FIT_BASE_WIDTH, box.w);
+      const naturalH = contentH || FIT_MIN_HEIGHT;
+      const scale = Math.min(1, box.w / canvasW, availH / naturalH);
+      view = { outerW: canvasW * scale, outerH: naturalH * scale, canvasW, canvasH: null, scale };
+    } else {
+      // The visible area is the frame's full width, and at most 16:10 tall
+      // (FIT_BASE_WIDTH x FIT_MIN_HEIGHT). A frame taller than that keeps
+      // the dashboard at 16:10 at the top instead of stretching the
+      // map/charts; a shorter one (or a frame running past the bottom of the
+      // window) uses just the usable height.
+      const outerW = box.w;
+      const outerH = Math.min(availH, (box.w * FIT_MIN_HEIGHT) / FIT_BASE_WIDTH);
+      // Never enlarge (max 1); shrink just enough that the canvas is at
+      // least FIT_BASE_WIDTH wide and FIT_MIN_HEIGHT tall.
+      const scale = Math.min(1, outerW / FIT_BASE_WIDTH, outerH / FIT_MIN_HEIGHT);
+      view = { outerW, outerH, canvasW: outerW / scale, canvasH: outerH / scale, scale };
+    }
+  }
 
   return (
-    <div ref={ref} className="h-full w-full overflow-hidden">
-      {scale && (
-        <div style={{ width: viewW, height: viewH, overflow: 'hidden' }}>
-          <div style={{ width: viewW / scale, height: viewH / scale, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+    <div ref={frameRef} className="h-full w-full overflow-hidden">
+      {view && (
+        <div style={{ width: view.outerW, height: view.outerH, margin: '0 auto', overflow: 'hidden' }}>
+          <div
+            ref={contentRef}
+            style={{
+              width: view.canvasW,
+              ...(view.canvasH != null ? { height: view.canvasH } : {}),
+              transform: `scale(${view.scale})`,
+              transformOrigin: 'top left',
+            }}
+          >
             {children}
           </div>
         </div>
