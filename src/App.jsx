@@ -1,8 +1,9 @@
 import { useState, useRef, useLayoutEffect, lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, useSearchParams, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
 import SubNav from './components/layout/SubNav';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import { useIsEmbedded } from './lib/embed';
 
 // Home page loads with the main bundle; the other pages are split into their
 // own chunks and only downloaded when the user opens them.
@@ -86,8 +87,12 @@ function FitToFrame({ children }) {
     if (fitWholePage) {
       // Canvas is at least FIT_BASE_WIDTH wide with auto height; shrink so
       // both its width and its full height fit inside the usable area.
-      const canvasW = Math.max(FIT_BASE_WIDTH, box.w);
+      // When the usable area is wider than the page's shape, the canvas is
+      // widened to match it, so the scaled page fills the frame's width
+      // instead of sitting in the middle with empty sides. (Section heights
+      // are mostly fixed, so a wider canvas barely changes the page height.)
       const naturalH = contentH || FIT_MIN_HEIGHT;
+      const canvasW = Math.max(FIT_BASE_WIDTH, box.w, Math.round((naturalH * box.w) / availH));
       const scale = Math.min(1, box.w / canvasW, availH / naturalH);
       view = { outerW: canvasW * scale, outerH: naturalH * scale, canvasW, canvasH: null, scale };
     } else {
@@ -111,6 +116,8 @@ function FitToFrame({ children }) {
         <div style={{ width: view.outerW, height: view.outerH, margin: '0 auto', overflow: 'hidden' }}>
           <div
             ref={contentRef}
+            // Desktop breakpoints inside the canvas — see index.css.
+            className="embed-desktop"
             style={{
               width: view.canvasW,
               ...(view.canvasH != null ? { height: view.canvasH } : {}),
@@ -128,12 +135,7 @@ function FitToFrame({ children }) {
 
 function AppContent() {
   const [isDarkMode, setIsDarkMode] = useState(false);
-  // Embedded = running inside an iframe (detected automatically, so it
-  // survives SubNav navigation, which drops query params) or ?embed=1.
-  // ?embed=0 turns it off.
-  const [searchParams] = useSearchParams();
-  const embedParam = searchParams.get('embed');
-  const isEmbedded = embedParam === '1' || (embedParam !== '0' && window.self !== window.top);
+  const isEmbedded = useIsEmbedded();
 
   const dashboard = (
     <div className={`${isDarkMode ? 'dark' : ''} font-sans relative h-full w-full`}>

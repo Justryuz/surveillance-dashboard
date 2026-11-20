@@ -7,6 +7,7 @@ import {
 import MalaysiaFlowMap from '../components/charts/MalaysiaFlowMap';
 import MalaysiaPenggunaanMap from '../components/charts/MalaysiaPenggunaanMap';
 import SearchableSelect from '../components/common/SearchableSelect';
+import { useIsEmbedded } from '../lib/embed';
 import { useTradeData } from '../hooks/useTradeData';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useGlobalTradeFlow } from '../hooks/useGlobalTradeFlow';
@@ -45,6 +46,13 @@ const BULAN_OPTIONS = [
 
 export default function Permintaan({ isDarkMode = false }) {
   const [activeTab, setActiveTab] = useState(0); 
+  // Embedded (iframe): the page is split into two one-screen views so it fits
+  // the frame without scrolling. 0 = Ringkasan (KPIs + chart), 1 = Butiran
+  // (the selected tab's tables/map). Outside an iframe both show together.
+  const isEmbedded = useIsEmbedded();
+  const [embedView, setEmbedView] = useState(0);
+  const showRingkasan = !isEmbedded || embedView === 0;
+  const showButiran = !isEmbedded || embedView === 1;
 
   // --- GLOBAL FILTERS ---
   const [selectedTahun, setSelectedTahun] = useState("All");
@@ -499,9 +507,17 @@ export default function Permintaan({ isDarkMode = false }) {
             {!dashboardLoading && !tradeLoading && !dashboardError && !tradeError && (data.liveFlags.eksport || data.liveFlags.penggunaan) && <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-500 mt-0.5">● Data Langsung</p>}
           </div>
         </div>
+        {/* Embedded only: switch between the two one-screen views */}
+        {isEmbedded && (
+          <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+            {['RINGKASAN', 'BUTIRAN'].map((label, idx) => (
+              <button key={label} onClick={() => setEmbedView(idx)} className={`py-1.5 px-4 rounded-lg font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all ${embedView === idx ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{label}</button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2 w-full md:w-auto bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
           {['UTAMA', 'PENGGUNAAN', 'EKSPORT'].map((tab, idx) => (
-            <button key={idx} onClick={() => setActiveTab(idx)} className={`flex-1 md:flex-none py-1.5 px-4 rounded-lg font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all ${activeTab === idx ? 'bg-white dark:bg-slate-600 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{tab}</button>
+            <button key={idx} onClick={() => { setActiveTab(idx); if (isEmbedded) setEmbedView(1); }} className={`flex-1 md:flex-none py-1.5 px-4 rounded-lg font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all ${activeTab === idx ? 'bg-white dark:bg-slate-600 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{tab}</button>
           ))}
         </div>
       </div>
@@ -533,6 +549,7 @@ export default function Permintaan({ isDarkMode = false }) {
           <button onClick={handleGlobalReset} className="shrink-0 h-[60px] w-[60px] bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 rounded-2xl flex items-center justify-center transition-all shadow-sm text-slate-400 hover:text-red-500"><RotateCcw className="w-5 h-5" /></button>
         </div>
 
+        {showRingkasan && (<>
         {/* MODERN KPI CARDS (2 ROWS + 1 GAUGE) */}
         <div className="flex flex-col lg:flex-row gap-4">
             
@@ -643,6 +660,9 @@ export default function Permintaan({ isDarkMode = false }) {
         {/* ========================================================================= */}
         {/* SUB TAB 0: UTAMA (KESELURUHAN) MAP & TABLES                               */}
         {/* ========================================================================= */}
+        </>)}
+
+        {showButiran && (<>
         {activeTab === 0 && (
           <>
             <div className="flex flex-col md:flex-row gap-4">
@@ -782,6 +802,7 @@ export default function Permintaan({ isDarkMode = false }) {
               </div>
           </div>
         )}
+        </>)}
 
       </div>
     </div>
