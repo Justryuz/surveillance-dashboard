@@ -8,6 +8,7 @@ import MalaysiaFlowMap from '../components/charts/MalaysiaFlowMap';
 import MalaysiaPengeluaranMap from '../components/charts/MalaysiaPengeluaranMap';
 import SearchableSelect from '../components/common/SearchableSelect';
 import { useIsEmbedded } from '../lib/embed';
+import EmbedPager, { EMBED_TABLE_ROWS } from '../components/common/EmbedPager';
 import { useTradeData } from '../hooks/useTradeData';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useGlobalTradeFlow } from '../hooks/useGlobalTradeFlow';
@@ -51,6 +52,8 @@ export default function Pembekalan({ isDarkMode = false }) {
   const [embedView, setEmbedView] = useState(0);
   const showRingkasan = !isEmbedded || embedView === 0;
   const showButiran = !isEmbedded || embedView === 1;
+  // Embedded: the transaction table is paged (EMBED_TABLE_ROWS per page).
+  const [tablePage, setTablePage] = useState(0);
 
   // --- GLOBAL FILTERS ---
   const [selectedTahun, setSelectedTahun] = useState("All");
@@ -489,6 +492,12 @@ export default function Pembekalan({ isDarkMode = false }) {
     </div>
   );
 
+  // Transaction table rows; paged when embedded so the view fits the frame.
+  const txRows = data.importTableDetails;
+  const txPageCount = isEmbedded ? Math.max(1, Math.ceil(txRows.length / EMBED_TABLE_ROWS)) : 1;
+  const txPage = Math.min(tablePage, txPageCount - 1);
+  const txVisible = isEmbedded ? txRows.slice(txPage * EMBED_TABLE_ROWS, (txPage + 1) * EMBED_TABLE_ROWS) : txRows;
+
   return (
     <div className="flex flex-col gap-4 h-full w-full relative bg-slate-50 dark:bg-slate-900 p-2 md:p-6 rounded-xl">
       <style>{`@keyframes scroll-left { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } } .animate-scroll { display: inline-block; white-space: nowrap; animation: scroll-left 20s linear infinite; }`}</style>
@@ -515,7 +524,7 @@ export default function Pembekalan({ isDarkMode = false }) {
         )}
         <div className="flex gap-2 w-full md:w-auto bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
           {['UTAMA', 'PENGELUARAN', 'IMPORT'].map((tab, idx) => (
-            <button key={idx} onClick={() => { setActiveTab(idx); if (isEmbedded) setEmbedView(1); }} className={`flex-1 md:flex-none py-1.5 px-4 rounded-lg font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all ${activeTab === idx ? 'bg-white dark:bg-slate-600 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{tab}</button>
+            <button key={idx} onClick={() => { setActiveTab(idx); setTablePage(0); if (isEmbedded) setEmbedView(1); }} className={`flex-1 md:flex-none py-1.5 px-4 rounded-lg font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all ${activeTab === idx ? 'bg-white dark:bg-slate-600 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{tab}</button>
           ))}
         </div>
       </div>
@@ -716,7 +725,7 @@ export default function Pembekalan({ isDarkMode = false }) {
         {/* --- SUB TAB 2: PEMANTAUAN IMPORT --- */}
         {activeTab === 2 && (
           <div className="flex flex-col gap-4">
-             <div className="flex flex-col lg:flex-row gap-4 h-[450px]">
+             <div className={`flex flex-col lg:flex-row gap-4 ${isEmbedded ? 'h-[340px]' : 'h-[450px]'}`}>
                 <div className="flex-[0.6] bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 shadow-sm flex flex-col">
                   <h3 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest text-center mb-2">IMPORT (MT) MENGIKUT PELABUHAN</h3>
                   <div className="flex-1 w-full"><ReactECharts option={portBarOption} style={{ height: '100%', width: '100%' }} notMerge={true} /></div>
@@ -730,7 +739,7 @@ export default function Pembekalan({ isDarkMode = false }) {
              </div>
 
              <div className="w-full bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden shadow-sm flex flex-col">
-                <div className="p-4 border-b border-slate-50 dark:border-slate-700/50"><h3 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">BUTIRAN TRANSAKSI IMPORT</h3></div>
+                <div className="p-4 border-b border-slate-50 dark:border-slate-700/50 flex items-center justify-between gap-2"><h3 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">BUTIRAN TRANSAKSI IMPORT</h3><EmbedPager page={txPage} pageCount={txPageCount} total={txRows.length} onChange={setTablePage} /></div>
                 <div className="overflow-x-auto flex-1 p-2">
                   <table className="w-full text-left border-collapse min-w-[800px]">
                     <thead className="bg-slate-50/50 dark:bg-slate-800/50 text-slate-400 text-[9px] uppercase tracking-wider rounded-lg">
@@ -745,7 +754,7 @@ export default function Pembekalan({ isDarkMode = false }) {
                       </tr>
                     </thead>
                     <tbody className="text-xs">
-                      {data.importTableDetails.map((row, i) => (
+                      {txVisible.map((row, i) => (
                         <tr key={i} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/80 transition-colors">
                           <td className="p-3 font-bold text-slate-700 dark:text-slate-300 uppercase">{row.komoditi}</td>
                           <td className="p-3 font-medium text-slate-600 dark:text-slate-400">{row.negara}</td>
